@@ -22,6 +22,10 @@ import {
 } from "./wildfire";
 import "./atlas.css";
 const emptyEvents: Event[] = [];
+const today = new Date().toISOString().slice(0, 10);
+const recentStart = new Date(Date.now() - 4 * 86400000)
+  .toISOString()
+  .slice(0, 10);
 const defaultQuery: FireQuery = {
   west: -125,
   south: 30,
@@ -53,13 +57,14 @@ function FireExplorer(p: {
   const [camera, setCamera] = useState<Camera>({ lon: -115, lat: 38, zoom: 1 }),
     [selected, setSelected] = useState<Selected | null>(null),
     [query, setQuery] = useState(defaultQuery);
-  const [fireStart, setFireStart] = useState("2026-09-01"),
-    [fireEnd, setFireEnd] = useState("2026-09-05");
+  const [fireStart, setFireStart] = useState(recentStart),
+    [fireEnd, setFireEnd] = useState(today);
   const [incLayer, setIncLayer] = useState(true),
     [detLayer, setDetLayer] = useState(true),
     [eqLayer, setEqLayer] = useState(true),
     [flat, setFlat] = useState(false),
     [countries, setCountries] = useState(false),
+    [showCoverage, setShowCoverage] = useState(false),
     [auto, setAuto] = useState(false),
     [wanted, setWanted] = useState(false),
     [speed, setSpeed] = useState(1);
@@ -121,6 +126,10 @@ function FireExplorer(p: {
       if (provider === "eonet") setInc(d);
       else if (provider === "cwfis") setCanada(d);
       else setDet(d);
+      if (demo) {
+        setFireStart("2026-09-01");
+        setFireEnd("2026-09-05");
+      }
       setCursor(Infinity);
       setProximity(false);
     } catch (e) {
@@ -134,8 +143,15 @@ function FireExplorer(p: {
     fetch("/api/config")
       .then((r) => r.json())
       .then(async (cfg) => {
+        if (cfg.demo && active) {
+          setFireStart("2026-09-01");
+          setFireEnd("2026-09-05");
+        }
         const [a, b, c, ca] = await Promise.all([
-          fetch("/api/wildfires/eonet" + (cfg.demo ? "?demo=true" : "")),
+          fetch(
+            "/api/wildfires/eonet" +
+              (cfg.demo ? "?demo=true" : `?start=${recentStart}&end=${today}`),
+          ),
           fetch(
             "/api/wildfires/firms?" +
               (cfg.demo
@@ -143,7 +159,15 @@ function FireExplorer(p: {
                 : "query=" + encodeURIComponent(JSON.stringify(defaultQuery))),
           ),
           fetch(cfg.demo ? "/api/demo" : "/api/recent?period=day"),
-          fetch("/api/wildfires/cwfis" + (cfg.demo ? "?demo=true" : "")),
+          fetch(
+            "/api/wildfires/cwfis?" +
+              (cfg.demo
+                ? "demo=true"
+                : "query=" +
+                  encodeURIComponent(
+                    JSON.stringify({ start: today, days: 1 }),
+                  )),
+          ),
         ]);
         const [i, d, e, canda] = await Promise.all([
           a.json(),
@@ -152,9 +176,17 @@ function FireExplorer(p: {
           ca.json(),
         ]);
         if (active) {
-          setInc(i);
-          setDet(d);
-          setCanada(canda);
+          setInc(
+            a.ok ? i : { ...i, state: "failed", incidents: [], detections: [] },
+          );
+          setDet(
+            b.ok ? d : { ...d, state: "failed", incidents: [], detections: [] },
+          );
+          setCanada(
+            ca.ok
+              ? canda
+              : { ...canda, state: "failed", incidents: [], detections: [] },
+          );
           if (c.ok) setEq(e);
           else setMessage("USGS unavailable: " + e.error);
         }
@@ -832,6 +864,20 @@ function FireExplorer(p: {
           {flat ? "3D globe" : "2D map"}
         </button>
       </div>
+      {inc && det && canada && incidents.length + detections.length === 0 && (
+        <div class="notice" role="status">
+          No wildfire records match the current dates and filters. Check source
+          status in the left panel, change the dates, or load the frozen
+          observations.
+          <div>
+            EONET: {inc.state} · FIRMS: {det.state} · Canada hotspots:{" "}
+            {canada.state}
+          </div>
+          <button disabled={!!busy} onClick={() => load("eonet", true)}>
+            Load frozen incidents
+          </button>
+        </div>
+      )}
       <Globe
         events={earthquakes}
         objects={objects}
@@ -846,7 +892,9 @@ function FireExplorer(p: {
         countries={countries}
         transect={defaultSection}
         region={
-          det?.coverage ? { ...det.coverage, name: "Detection coverage" } : null
+          showCoverage && det?.coverage
+            ? { ...det.coverage, name: "Detection coverage" }
+            : null
         }
         section={false}
         auto={auto}
@@ -937,14 +985,22 @@ function FireExplorer(p: {
           </select>
         </label>
       </div>
+      <label>
+        <input
+          type="checkbox"
+          checked={showCoverage}
+          onChange={(e) => setShowCoverage(e.currentTarget.checked)}
+        />
+        Show detection coverage
+      </label>
       <p class="map-credit">
         Natural Earth ·{" "}
         <span class="incident-symbol">▲ Incident locations</span> ·{" "}
         <span class="detection-symbol">■ Thermal detections</span>
         {p.overview ? " · ● Earthquakes" : ""}
         <br />
-        Dashed bounds show detection dataset coverage. Points are not
-        perimeters.
+        {showCoverage && "Dashed bounds show detection dataset coverage. "}
+        Points are not perimeters.
       </p>
     </div>
   );

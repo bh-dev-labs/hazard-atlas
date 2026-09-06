@@ -3,7 +3,12 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { feature } from "topojson-client";
 import type { FeatureCollection } from "geojson";
-import { countryLabels, countryLabelVisible } from "./countryLabels";
+import {
+  countryLabels,
+  countryLabelOpacity,
+  countryLabelVisible,
+  planLabels,
+} from "./countryLabels";
 
 const geography = JSON.parse(
   readFileSync(new URL("../public/data/earth.json", import.meta.url), "utf8"),
@@ -41,4 +46,31 @@ test("country labels hide the far side of the globe but remain available on the 
   assert.equal(countryLabelVisible(japan, [140, 35], false), true);
   assert.equal(countryLabelVisible(japan, [-40, -35], false), false);
   assert.equal(countryLabelVisible(japan, [-40, -35], true), true);
+});
+
+test("country label plans stay stable while the camera rotates", () => {
+  const measure = (name: string, size: number) => name.length * size * 0.55;
+  const plan = planLabels(labels, measure, 380, 1).filter(
+    (entry) => entry.opacity > 0,
+  );
+  assert.ok(plan.some((entry) => entry.label.name === "Japan"));
+  assert.deepEqual(
+    planLabels(labels, measure, 380, 1)
+      .filter((entry) => entry.opacity > 0)
+      .map((entry) => entry.label.name),
+    plan.map((entry) => entry.label.name),
+  );
+});
+
+test("country labels fade smoothly at the globe limb", () => {
+  const japan = labels.find((country) => country.name === "Japan")!;
+  assert.equal(countryLabelOpacity(japan, [140, 35], false), 1);
+  assert.equal(countryLabelOpacity(japan, [-40, -35], false), 0);
+  let previous = 1;
+  for (let lon = 140; lon >= -40; lon -= 1) {
+    const next = countryLabelOpacity(japan, [lon, 35], false);
+    assert.ok(next <= previous + 1e-9);
+    assert.ok(previous - next < 0.35);
+    previous = next;
+  }
 });

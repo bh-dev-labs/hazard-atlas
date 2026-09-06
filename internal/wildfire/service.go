@@ -274,6 +274,15 @@ func (s *Service) Retrieve(ctx context.Context, provider string, q Query) (resul
 		}
 		d.Sources = []Source{{"Natural Resources Canada CWFIS", "https://cwfis.cfs.nrcan.gc.ca/downloads/hotspots/"}}
 	}
+	// A capped EONET page is still useful after every returned incident has
+	// passed validation. Preserve those records and their incomplete status.
+	if err == errEONETCap {
+		d.Fetched = time.Now().UTC().Format(time.RFC3339Nano)
+		d.State = "partial"
+		d.Complete = false
+		d.Error = err.Error()
+		return s.save(d, raw)
+	}
 	if err != nil {
 		if cacheErr == nil {
 			d = previous

@@ -7,6 +7,7 @@ import (
 	"encoding/csv"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"math"
@@ -18,6 +19,8 @@ import (
 
 const Product = "VIIRS_NOAA20_NRT"
 const MaxRecords = 50000
+
+var errEONETCap = errors.New("EONET response reached the 1000-record cap; showing available incidents, retrieval incomplete")
 
 type Geometry struct {
 	Type        string          `json:"type"`
@@ -156,8 +159,8 @@ func ParseEONET(raw []byte) ([]Incident, error) {
 	if e := json.Unmarshal(raw, &v); e != nil || v.Events == nil {
 		return nil, fmt.Errorf("invalid EONET event envelope")
 	}
-	if len(v.Events) >= 1000 {
-		return nil, fmt.Errorf("EONET response reached the 1000-record cap; retrieval incomplete")
+	if len(v.Events) > 1000 {
+		return nil, fmt.Errorf("EONET response exceeds the 1000-record cap")
 	}
 	out := []Incident{}
 	seen := map[string]bool{}
@@ -203,6 +206,9 @@ func ParseEONET(raw []byte) ([]Incident, error) {
 		}
 		sort.SliceStable(e.Geometry, func(i, j int) bool { return e.Geometry[i].Date < e.Geometry[j].Date })
 		out = append(out, Incident{"eonet:" + e.ID, e.ID, e.Title, e.Description, e.Closed, status, e.Sources, e.Geometry})
+	}
+	if len(v.Events) == 1000 {
+		return out, errEONETCap
 	}
 	return out, nil
 }
@@ -321,7 +327,9 @@ func ParseCWFISHotspots(raw []byte) ([]Detection, error) {
 	columns := map[string]int{}
 	for i, h := range header {
 		name := strings.TrimSpace(h)
-		if _, exists := columns[name]; exists { return nil, fmt.Errorf("duplicate CWFIS column") }
+		if _, exists := columns[name]; exists {
+			return nil, fmt.Errorf("duplicate CWFIS column")
+		}
 		columns[name] = i
 	}
 	for _, k := range []string{"lat", "lon", "rep_date", "source", "sensor", "fwi", "estarea"} {
@@ -330,7 +338,9 @@ func ParseCWFISHotspots(raw []byte) ([]Detection, error) {
 		}
 	}
 	get := func(row []string, k string) string {
-		if i, ok := columns[k]; ok { return strings.TrimSpace(row[i]) }
+		if i, ok := columns[k]; ok {
+			return strings.TrimSpace(row[i])
+		}
 		return ""
 	}
 	out := []Detection{}
@@ -359,11 +369,17 @@ func ParseCWFISHotspots(raw []byte) ([]Detection, error) {
 		d := Detection{ID: "cwfis:" + hash([]byte(identity)), Acquisition: t.UTC().Format(time.RFC3339), Precision: "second", Longitude: lon, Latitude: lat, Satellite: get(row, "satellite"), SourceCode: get(row, "source"), Agency: get(row, "agency"), Fuel: get(row, "fuel"), Instrument: get(row, "sensor"), Product: "CWFIS_FIREM3_HOTSPOTS", Version: "daily", Confidence: "unknown", DayNight: "unknown"}
 		for k, dest := range map[string]**float64{"fwi": &d.FWI, "ros": &d.ROS, "hfi": &d.HFI, "sfc": &d.SFC, "tfc": &d.TFC} {
 			value := get(row, k)
-			if value == "" { continue }
+			if value == "" {
+				continue
+			}
 			v, err := strconv.ParseFloat(value, 64)
-			if err != nil || math.IsNaN(v) || math.IsInf(v, 0) { return nil, fmt.Errorf("invalid CWFIS measurement %s", k) }
+			if err != nil || math.IsNaN(v) || math.IsInf(v, 0) {
+				return nil, fmt.Errorf("invalid CWFIS measurement %s", k)
+			}
 			// Negative provider sentinel values are unavailable, not measurements.
-			if v >= 0 { *dest = &v }
+			if v >= 0 {
+				*dest = &v
+			}
 		}
 		if at, ok := seen[d.ID]; ok {
 			out[at] = d

@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -155,4 +156,31 @@ type rewriteTransport struct{ base string }
 func (rt rewriteTransport) RoundTrip(r *http.Request) (*http.Response, error) {
 	req, _ := http.NewRequestWithContext(r.Context(), r.Method, rt.base, nil)
 	return http.DefaultTransport.RoundTrip(req)
+}
+
+func TestCappedEONETPreservesValidatedIncidents(t *testing.T) {
+	s := testService(t)
+	var records []json.RawMessage
+	for i := 0; i < 1000; i++ {
+		id, _ := json.Marshal(strconv.Itoa(i))
+		records = append(records, json.RawMessage(`{"id":`+string(id)+`,"title":"Wildfire","categories":[{"id":"wildfires"}],"geometry":[{"type":"Point","coordinates":[-120,40],"date":"2026-09-05T12:00:00Z"}]}`))
+	}
+	raw, _ := json.Marshal(map[string]any{"events": records})
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.Write(raw) }))
+	defer server.Close()
+	s.client = &http.Client{Transport: rewriteTransport{base: server.URL}}
+	d, err := s.Retrieve(context.Background(), "eonet", Query{})
+	if err != nil || d.State != "partial" || d.Complete || len(d.Incidents) != 1000 || d.ID == "" || d.Fetched == "" || d.Error == "" {
+		t.Fatalf("capped records lost or presented as complete: state=%s count=%d error=%v", d.State, len(d.Incidents), err)
+	}
+	cached, err := s.Retrieve(context.Background(), "eonet", Query{})
+	if err != nil || cached.ID != d.ID || cached.Complete || len(cached.Incidents) != 1000 {
+		t.Fatal("partial snapshot not preserved")
+	}
+	records[999] = json.RawMessage(`{"id":"invalid","title":"Bad","categories":[{"id":"wildfires"}],"geometry":[{"type":"Point","coordinates":[999,40],"date":"2026-09-05T12:00:00Z"}]}`)
+	bad, _ := json.Marshal(map[string]any{"events": records})
+	incidents, err := ParseEONET(bad)
+	if err == nil || err == errEONETCap || len(incidents) != 0 {
+		t.Fatal("cap bypassed validation")
+	}
 }

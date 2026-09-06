@@ -13,8 +13,10 @@ import { corridorLines } from "./science";
 import { type Section } from "./data";
 import {
   countryLabels,
-  countryLabelVisible,
+  countryLabelOpacity,
+  planLabels,
   type CountryLabel,
+  type LabelPlan,
 } from "./countryLabels";
 import {
   color,
@@ -67,6 +69,11 @@ export function Globe(p: Props) {
     { o: RenderObject; members?: RenderObject[]; x: number; y: number }[]
   >([]);
   const polygons = useRef<RenderObject[]>([]);
+  const labelPlan = useRef<{ key: string; plan: LabelPlan }>({
+    key: "",
+    plan: [],
+  });
+  const labelSprites = useRef(new Map<string, HTMLCanvasElement>());
   const invert = useRef<
     ((p: [number, number]) => [number, number] | null) | null
   >(null);
@@ -103,7 +110,13 @@ export function Globe(p: Props) {
     scheme.addEventListener("change", repaint);
     const ro = new ResizeObserver((es) => {
       const r = es[0].contentRect;
-      setSize([r.width, Math.max(120, r.height)]);
+      const width = Math.round(r.width);
+      const height = Math.max(120, Math.round(r.height));
+      setSize((previous) =>
+        previous[0] === width && previous[1] === height
+          ? previous
+          : [width, height],
+      );
     });
     if (ref.current) ro.observe(ref.current.parentElement!);
     return () => {
@@ -148,7 +161,7 @@ export function Globe(p: Props) {
     if (canvas.width !== pixelWidth) canvas.width = pixelWidth;
     if (canvas.height !== pixelHeight) canvas.height = pixelHeight;
     canvas.style.height = h + "px";
-    ctx.setTransform(pixelWidth / w, 0, 0, pixelHeight / h, 0, 0);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.lineWidth = 1;
     // Rasterize glyphs and sharp marker edges once, then translate the same
     // image at the exact projected coordinate on every animation frame.
@@ -278,62 +291,56 @@ export function Globe(p: Props) {
       ctx.setLineDash([]);
     }
     if (p.countries) {
-      type Box = { left: number; right: number; top: number; bottom: number };
-      const placed: Box[] = [];
-      const overlaps = (box: Box, other: Box) =>
-        box.left < other.right &&
-        box.right > other.left &&
-        box.top < other.bottom &&
-        box.bottom > other.top;
-      ctx.save();
-      ctx.font = "12px sans-serif";
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      ctx.fillStyle = token("--ink-strong");
-      ctx.strokeStyle = token("--globe-ocean");
-      ctx.lineWidth = 3;
-      ctx.lineJoin = "round";
-      for (const country of countries) {
-        if (!countryLabelVisible(country, [p.camera.lon, p.camera.lat], p.flat))
-          continue;
-        const point = proj(country.coordinate);
-        if (!point) continue;
-        const [x, y] = point;
-        const halfWidth = ctx.measureText(country.name).width / 2 + 4;
-        // Keep the name attached to its geographic anchor. Re-optimizing
-        // offsets against moving markers made names jump 14-56px per frame.
-        const box = {
-          left: x - halfWidth,
-          right: x + halfWidth,
-          top: y - 9,
-          bottom: y + 9,
+      const key = [countries.length, w, h, p.camera.zoom, p.flat].join();
+      if (labelPlan.current.key !== key) {
+        labelPlan.current = {
+          key,
+          plan: planLabels(
+            countries,
+            (name, size) => {
+              ctx.font = `${size}px sans-serif`;
+              return ctx.measureText(name).width;
+            },
+            proj.scale(),
+            p.camera.zoom,
+          ),
         };
-        if (
-          box.left < 4 ||
-          box.right > w - 4 ||
-          box.top < 4 ||
-          box.bottom > h - 4 ||
-          placed.some((other) => overlaps(box, other))
-        )
-          continue;
-        placed.push(box);
-        const bitmap = sprite(
-          `country:${country.name}`,
-          halfWidth * 2,
-          24,
-          (context) => {
-            context.font = "12px sans-serif";
-            context.textAlign = "center";
-            context.textBaseline = "middle";
-            context.fillStyle = token("--ink-strong");
-            context.strokeStyle = token("--globe-ocean");
-            context.lineWidth = 3;
-            context.lineJoin = "round";
-            context.strokeText(country.name, 0, 0);
-            context.fillText(country.name, 0, 0);
-          },
+      }
+      ctx.save();
+      for (const { label, size, halfWidth, opacity } of labelPlan.current.plan) {
+        const alpha =
+          opacity *
+          countryLabelOpacity(label, [p.camera.lon, p.camera.lat], p.flat);
+        if (alpha <= 0) continue;
+        const point = proj(label.coordinate);
+        if (!point) continue;
+        const spriteKey = [label.name, size, dpr, theme].join();
+        let bitmap = labelSprites.current.get(spriteKey);
+        if (!bitmap) {
+          bitmap = document.createElement("canvas");
+          bitmap.width = Math.ceil(halfWidth * 2 * dpr);
+          bitmap.height = Math.ceil((size + 12) * dpr);
+          const ink = bitmap.getContext("2d")!;
+          ink.scale(dpr, dpr);
+          ink.font = `${size}px sans-serif`;
+          ink.textAlign = "center";
+          ink.textBaseline = "middle";
+          ink.fillStyle = token("--ink-strong");
+          ink.strokeStyle = token("--globe-ocean");
+          ink.lineWidth = 3;
+          ink.lineJoin = "round";
+          ink.strokeText(label.name, bitmap.width / dpr / 2, bitmap.height / dpr / 2);
+          ink.fillText(label.name, bitmap.width / dpr / 2, bitmap.height / dpr / 2);
+          labelSprites.current.set(spriteKey, bitmap);
+        }
+        ctx.globalAlpha = alpha;
+        ctx.drawImage(
+          bitmap,
+          point[0] - bitmap.width / dpr / 2,
+          point[1] - bitmap.height / dpr / 2,
+          bitmap.width / dpr,
+          bitmap.height / dpr,
         );
-        drawSprite(bitmap, x, y);
       }
       ctx.restore();
     }
