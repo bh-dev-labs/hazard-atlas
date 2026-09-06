@@ -79,3 +79,4 @@ Licensed under the [MIT License](LICENSE). Third-party licenses are recorded in 
 
 
 Built by Bruce Hoppe · [github.com/bruce-hoppe_uoft/earthquake-observatory](https://github.com/bruce-hoppe_uoft/earthquake-observatory)
+# hazard-atlas
