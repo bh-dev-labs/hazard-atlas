@@ -1,6 +1,13 @@
-# Release readiness — Hazard Atlas 0.2.0 local candidate
+# Release readiness — Hazard Atlas 0.3.3 local candidate
 
 This is a functioning local release candidate. **It is not a claim that every publication gate in the much larger build specification is complete.** The earthquake baseline is preserved, and EONET, FIRMS and Natural Resources Canada CWFIS adapters are implemented.
+
+## 0.3.3 verification (2026-09-06 UTC)
+
+- Production frontend build and all 26 frontend tests passed; Go tests and vet passed.
+- The animation regression check passed 240 camera frames across globe/map views at DPR 1 and 2, verifying fixed geographic anchors, marker picking, glyph-cache reuse and unchanged canvas backing dimensions. Seven full application browser checks also passed.
+- All three ZIPs passed integrity and documentation-layout checks. Apple silicon's freshly extracted package reports version 0.3.3 and passed the consumer checks in [consumer-test-results.json](consumer-test-results.json), including backup/restore and restart.
+- Windows x64 and Intel macOS packages were cross-compiled and inspected; runtime execution on those platforms remains unverified. macOS app signatures are local ad-hoc signatures.
 
 ## Hazard Atlas evidence
 

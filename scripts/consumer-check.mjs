@@ -2,16 +2,13 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { spawn, execFileSync } from "node:child_process";
 import assert from "node:assert/strict";
+const { version } = JSON.parse(await fs.readFile("package.json", "utf8"));
+const folder = `HazardAtlas-${version}-darwin-arm64`;
 const root = await fs.mkdtemp("/private/tmp/atlas-consumer-");
-execFileSync("/usr/bin/unzip", [
-  "-q",
-  "release/HazardAtlas-0.2.0-darwin-arm64.zip",
-  "-d",
-  root,
-]);
+execFileSync("/usr/bin/unzip", ["-q", `release/${folder}.zip`, "-d", root]);
 const binary = path.join(
   root,
-  "HazardAtlas-0.2.0-darwin-arm64",
+  folder,
   "Hazard Atlas.app",
   "Contents/MacOS/hazard-atlas",
 );
@@ -38,6 +35,10 @@ const stop = async (p) => {
   await new Promise((r) => p.once("exit", r));
 };
 let p = await start(data);
+assert.equal(
+  (await (await fetch("http://127.0.0.1:8790/api/health")).json()).version,
+  version,
+);
 const response = await fetch("http://127.0.0.1:8790/api/demo");
 const demo = await response.json();
 assert.equal(demo.data.features.length, 618);
@@ -60,7 +61,7 @@ assert.equal(
 await stop(p);
 const restored = path.join(root, "restored");
 await fs.mkdir(restored);
-await fs.copyFile(backup, path.join(restored, "observatory.db"));
+await fs.copyFile(backup, path.join(restored, "hazard-atlas.db"));
 assert.ok(
   execFileSync(binary, ["-data-dir", restored, "-check-db"])
     .toString()
@@ -74,7 +75,8 @@ assert.equal(
 );
 await stop(p);
 const report = {
-  archive: "darwin-arm64",
+  archive: `${folder}.zip`,
+  version,
   root,
   checks: [
     "Fresh ZIP extraction",

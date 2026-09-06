@@ -1,5 +1,5 @@
 import { type RenderObject } from "./wildfire";
-import { useEffect, useRef, useState } from "preact/hooks";
+import { useEffect, useLayoutEffect, useRef, useState } from "preact/hooks";
 import {
   geoOrthographic,
   geoEquirectangular,
@@ -14,8 +14,6 @@ import { type Section } from "./data";
 import {
   countryLabels,
   countryLabelVisible,
-  labelOffsets,
-  snapToPixel,
   type CountryLabel,
 } from "./countryLabels";
 import {
@@ -63,6 +61,8 @@ export function Globe(p: Props) {
     [theme, setTheme] = useState(0),
     [cursor, setCursor] = useState(""),
     [spoken, setSpoken] = useState("");
+  const sprites = useRef(new Map<string, HTMLCanvasElement>());
+  const spriteStyle = useRef("");
   const objectHits = useRef<
     { o: RenderObject; members?: RenderObject[]; x: number; y: number }[]
   >([]);
@@ -133,7 +133,7 @@ export function Globe(p: Props) {
     frame = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(frame);
   }, [p.auto, p.speed, p.flat]);
-  useEffect(() => {
+  useLayoutEffect(() => {
     const canvas = ref.current;
     if (!canvas) return;
     const ctx = canvas.getContext("2d");
@@ -143,10 +143,44 @@ export function Globe(p: Props) {
     }
     const [w, h] = size,
       dpr = Math.min(2, devicePixelRatio || 1);
-    canvas.width = w * dpr;
-    canvas.height = h * dpr;
+    const pixelWidth = Math.round(w * dpr),
+      pixelHeight = Math.round(h * dpr);
+    if (canvas.width !== pixelWidth) canvas.width = pixelWidth;
+    if (canvas.height !== pixelHeight) canvas.height = pixelHeight;
     canvas.style.height = h + "px";
-    ctx.scale(dpr, dpr);
+    ctx.setTransform(pixelWidth / w, 0, 0, pixelHeight / h, 0, 0);
+    ctx.lineWidth = 1;
+    // Rasterize glyphs and sharp marker edges once, then translate the same
+    // image at the exact projected coordinate on every animation frame.
+    const style = `${dpr}:${theme}`;
+    if (spriteStyle.current !== style) {
+      sprites.current.clear();
+      spriteStyle.current = style;
+    }
+    const sprite = (
+      key: string,
+      width: number,
+      height: number,
+      paint: (context: CanvasRenderingContext2D) => void,
+    ) => {
+      let bitmap = sprites.current.get(key);
+      if (!bitmap) {
+        bitmap = document.createElement("canvas");
+        bitmap.width = Math.ceil(width * dpr);
+        bitmap.height = Math.ceil(height * dpr);
+        const context = bitmap.getContext("2d")!;
+        context.scale(dpr, dpr);
+        context.translate(bitmap.width / dpr / 2, bitmap.height / dpr / 2);
+        paint(context);
+        sprites.current.set(key, bitmap);
+      }
+      return bitmap;
+    };
+    const drawSprite = (bitmap: HTMLCanvasElement, x: number, y: number) => {
+      const width = bitmap.width / dpr,
+        height = bitmap.height / dpr;
+      ctx.drawImage(bitmap, x - width / 2, y - height / 2, width, height);
+    };
     ctx.clearRect(0, 0, w, h);
     const proj = p.flat
       ? geoEquirectangular()
@@ -243,6 +277,66 @@ export function Globe(p: Props) {
       ctx.stroke();
       ctx.setLineDash([]);
     }
+    if (p.countries) {
+      type Box = { left: number; right: number; top: number; bottom: number };
+      const placed: Box[] = [];
+      const overlaps = (box: Box, other: Box) =>
+        box.left < other.right &&
+        box.right > other.left &&
+        box.top < other.bottom &&
+        box.bottom > other.top;
+      ctx.save();
+      ctx.font = "12px sans-serif";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillStyle = token("--ink-strong");
+      ctx.strokeStyle = token("--globe-ocean");
+      ctx.lineWidth = 3;
+      ctx.lineJoin = "round";
+      for (const country of countries) {
+        if (!countryLabelVisible(country, [p.camera.lon, p.camera.lat], p.flat))
+          continue;
+        const point = proj(country.coordinate);
+        if (!point) continue;
+        const [x, y] = point;
+        const halfWidth = ctx.measureText(country.name).width / 2 + 4;
+        // Keep the name attached to its geographic anchor. Re-optimizing
+        // offsets against moving markers made names jump 14-56px per frame.
+        const box = {
+          left: x - halfWidth,
+          right: x + halfWidth,
+          top: y - 9,
+          bottom: y + 9,
+        };
+        if (
+          box.left < 4 ||
+          box.right > w - 4 ||
+          box.top < 4 ||
+          box.bottom > h - 4 ||
+          placed.some((other) => overlaps(box, other))
+        )
+          continue;
+        placed.push(box);
+        const bitmap = sprite(
+          `country:${country.name}`,
+          halfWidth * 2,
+          24,
+          (context) => {
+            context.font = "12px sans-serif";
+            context.textAlign = "center";
+            context.textBaseline = "middle";
+            context.fillStyle = token("--ink-strong");
+            context.strokeStyle = token("--globe-ocean");
+            context.lineWidth = 3;
+            context.lineJoin = "round";
+            context.strokeText(country.name, 0, 0);
+            context.fillText(country.name, 0, 0);
+          },
+        );
+        drawSprite(bitmap, x, y);
+      }
+      ctx.restore();
+    }
     hits.current = [];
     const ordered = [
       ...p.events.filter((e) => e.id !== p.selected),
@@ -311,10 +405,7 @@ export function Globe(p: Props) {
         continue;
       const xy = proj([lon, lat]);
       if (!xy) continue;
-      // Straight-edged markers show subpixel drift as a shimmer under
-      // rotation; hold them to device pixels like the labels.
-      const x = snapToPixel(xy[0], dpr),
-        y = snapToPixel(xy[1], dpr);
+      const [x, y] = xy;
       if (x < 0 || x > w || y < 0 || y > h) continue;
       if (o.kind === "detection" && (p.objects?.length || 0) > 2000) {
         const key = Math.floor(x / 18) + "," + Math.floor(y / 18);
@@ -323,17 +414,23 @@ export function Globe(p: Props) {
         else clustered.set(key, { o, members: [o], x, y });
         continue;
       }
-      ctx.beginPath();
-      if (o.kind === "incident") {
-        ctx.moveTo(x, y - 7);
-        ctx.lineTo(x + 6, y + 5);
-        ctx.lineTo(x - 6, y + 5);
-        ctx.closePath();
-      } else {
-        ctx.rect(x - 3, y - 3, 6, 6);
-      }
-      ctx.fill();
-      ctx.stroke();
+      const bitmap = sprite(o.kind, 18, 18, (context) => {
+        context.fillStyle = o.kind === "incident" ? "#ac3c20" : "#973f92";
+        context.strokeStyle = token("--marker-edge");
+        context.lineWidth = 1;
+        context.beginPath();
+        if (o.kind === "incident") {
+          context.moveTo(0, -7);
+          context.lineTo(6, 5);
+          context.lineTo(-6, 5);
+          context.closePath();
+        } else {
+          context.rect(-3, -3, 6, 6);
+        }
+        context.fill();
+        context.stroke();
+      });
+      drawSprite(bitmap, x, y);
       if (o.id === p.selected || o.id.split("@")[0] === p.selected) {
         ctx.beginPath();
         ctx.arc(x, y, 11, 0, Math.PI * 2);
@@ -355,74 +452,6 @@ export function Globe(p: Props) {
         ctx.fillText(String(members.length), x + 7, y + 3);
       }
       objectHits.current.push(cluster);
-    }
-    if (p.countries) {
-      const markers = [
-        ...hits.current.map((hit) => ({
-          left: hit.x - hit.r - 6,
-          right: hit.x + hit.r + 6,
-          top: hit.y - hit.r - 6,
-          bottom: hit.y + hit.r + 6,
-        })),
-        ...objectHits.current.map((hit) => ({
-          left: hit.x - 12,
-          right: hit.x + 12,
-          top: hit.y - 12,
-          bottom: hit.y + 12,
-        })),
-      ];
-      type Box = { left: number; right: number; top: number; bottom: number };
-      const placed: Box[] = [];
-      const overlaps = (box: Box, other: Box) =>
-        box.left < other.right &&
-        box.right > other.left &&
-        box.top < other.bottom &&
-        box.bottom > other.top;
-      ctx.save();
-      ctx.font = "12px sans-serif";
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      ctx.fillStyle = token("--ink-strong");
-      ctx.strokeStyle = token("--globe-ocean");
-      ctx.lineWidth = 3;
-      ctx.lineJoin = "round";
-      for (const country of countries) {
-        if (!countryLabelVisible(country, [p.camera.lon, p.camera.lat], p.flat))
-          continue;
-        const point = proj(country.coordinate);
-        if (!point) continue;
-        const leftToRight = snapToPixel(point[0], dpr);
-        const halfWidth = ctx.measureText(country.name).width / 2 + 4;
-        // Labels never cover each other, but a marker cluster on the anchor
-        // is a cost rather than a veto: take a clear anchor when one exists,
-        // otherwise the least-covered one, so a busy country keeps its name.
-        let best: { y: number; box: Box; cost: number } | null = null;
-        for (const offset of labelOffsets) {
-          const topToBottom = snapToPixel(point[1] + offset, dpr);
-          const box = {
-            left: leftToRight - halfWidth,
-            right: leftToRight + halfWidth,
-            top: topToBottom - 9,
-            bottom: topToBottom + 9,
-          };
-          if (
-            box.left < 4 ||
-            box.right > w - 4 ||
-            box.top < 4 ||
-            box.bottom > h - 4
-          )
-            continue;
-          if (placed.some((other) => overlaps(box, other))) continue;
-          const cost = markers.filter((other) => overlaps(box, other)).length;
-          if (!best || cost < best.cost) best = { y: topToBottom, box, cost };
-          if (cost === 0) break;
-        }
-        if (!best) continue;
-        placed.push(best.box);
-        ctx.strokeText(country.name, leftToRight, best.y);
-        ctx.fillText(country.name, leftToRight, best.y);
-      }
-      ctx.restore();
     }
   }, [
     earth,

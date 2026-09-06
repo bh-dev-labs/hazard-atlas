@@ -1,3 +1,7 @@
+# 0.3.3 — local release
+
+Fixes the remaining country-label and fire-marker jumping under rotation. Country names retain fixed geographic anchors, and labels and point markers reuse cached images while moving at exact projected coordinates. The canvas no longer resets its backing storage on every frame. Markers render above country labels and remain selectable.
+
 # 0.3.2 — local release
 
 Incident and detection markers no longer shimmer while the globe rotates. Country names are no longer suppressed by the markers on top of them: a label still never covers another label, but takes the least-covered anchor when no clear one exists, so the United States and Canada keep their names over a busy fire season.

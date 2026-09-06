@@ -17,10 +17,6 @@ const displayNames: Record<string, string> = {
   "Central African Republic": "Central African Rep.",
 };
 
-// Anchor offsets tried in order, so a label can step off a marker instead
-// of disappearing. Vertical only: a horizontal shift would misplace it.
-export const labelOffsets = [0, -14, 14, -28, 28];
-
 export function countryLabels(countries: FeatureCollection): CountryLabel[] {
   return countries.features
     .map((country) => {
@@ -41,14 +37,6 @@ export function countryLabels(countries: FeatureCollection): CountryLabel[] {
       (country) => country.name && country.coordinate.every(Number.isFinite),
     )
     .sort((first, second) => second.area - first.area);
-}
-
-// Rotation moves a label a fraction of a pixel per frame, which would
-// re-rasterize its glyphs and halo sixty times a second while the label
-// barely moves — legible as a shimmer. Snapping to whole device pixels
-// holds each label still until it has earned a full pixel of movement.
-export function snapToPixel(value: number, ratio: number) {
-  return Math.round(value * ratio) / ratio;
 }
 
 export function countryLabelVisible(

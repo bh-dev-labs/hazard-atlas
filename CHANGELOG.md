@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.3 (2026-09-06 UTC)
+
+- Country labels keep fixed geographic anchors instead of jumping between collision offsets.
+- Labels and incident/detection markers reuse rasterized images at exact projected coordinates for smooth movement. Canvas backing storage is resized only when dimensions change.
+- Added a 240-frame browser regression check across globe/map views and standard/Retina pixel densities, including marker picking and glyph-cache reuse.
+
 ## 0.3.2 (2026-09-06 UTC)
 
 - Incident and detection markers no longer shimmer under rotation; they snap to device pixels like the labels.
