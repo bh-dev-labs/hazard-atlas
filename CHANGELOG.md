@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.3.1 (2026-09-06 UTC)
 
 - Country names no longer shimmer under rotation: label text snaps to whole device pixels, so a label holds still until it has earned a full pixel of movement instead of re-rasterizing every frame.
 - Restored the **Stop the local server** control in the footer. The `/api/quit` endpoint and its styling survived the fork, but no button rendered it, and the quick start pointed at a control that did not exist.
