@@ -21,9 +21,12 @@ const labels = countryLabels(
 
 test("country names come from bundled geography with mainland anchors", () => {
   assert.ok(labels.length > 170);
-  for (const name of ["Canada", "Japan", "France"]) {
+  for (const name of ["Canada", "Japan", "France", "United States"]) {
     assert.ok(labels.some((country) => country.name === name));
   }
+  assert.ok(
+    !labels.some((country) => country.name === "United States of America"),
+  );
   const france = labels.find((country) => country.name === "France")!;
   assert.ok(france.coordinate[0] > -5 && france.coordinate[0] < 10);
   assert.ok(france.coordinate[1] > 40 && france.coordinate[1] < 52);

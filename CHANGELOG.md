@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Incident and detection markers no longer shimmer under rotation; they snap to device pixels like the labels.
+- Country names are no longer vetoed by markers. A label still never covers another label, but a marker cluster on its anchor is a cost rather than a refusal: the label takes a clear anchor when one exists and the least-covered otherwise, so the country carrying the most observations keeps its name. Long formal names use their atlas forms ("United States", "DR Congo").
+
 ## 0.3.1 (2026-09-06 UTC)
 
 - Country names no longer shimmer under rotation: label text snaps to whole device pixels, so a label holds still until it has earned a full pixel of movement instead of re-rasterizing every frame.

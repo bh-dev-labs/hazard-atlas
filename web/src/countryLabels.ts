@@ -7,6 +7,20 @@ export type CountryLabel = {
   area: number;
 };
 
+// Natural Earth's formal names run to 150px at label size and lose every
+// collision test over a busy region; these are the forms atlases print.
+const displayNames: Record<string, string> = {
+  "United States of America": "United States",
+  "Democratic Republic of the Congo": "DR Congo",
+  "United Republic of Tanzania": "Tanzania",
+  "Bosnia and Herzegovina": "Bosnia & Herz.",
+  "Central African Republic": "Central African Rep.",
+};
+
+// Anchor offsets tried in order, so a label can step off a marker instead
+// of disappearing. Vertical only: a horizontal shift would misplace it.
+export const labelOffsets = [0, -14, 14, -28, 28];
+
 export function countryLabels(countries: FeatureCollection): CountryLabel[] {
   return countries.features
     .map((country) => {
@@ -16,8 +30,9 @@ export function countryLabels(countries: FeatureCollection): CountryLabel[] {
               .map((coordinates) => ({ type: "Polygon" as const, coordinates }))
               .sort((first, second) => geoArea(second) - geoArea(first))[0]
           : country.geometry;
+      const name = String(country.properties?.name || "");
       return {
-        name: String(country.properties?.name || ""),
+        name: displayNames[name] ?? name,
         coordinate: geoCentroid(geometry),
         area: geoArea(geometry),
       };

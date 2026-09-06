@@ -14,6 +14,7 @@ import { type Section } from "./data";
 import {
   countryLabels,
   countryLabelVisible,
+  labelOffsets,
   snapToPixel,
   type CountryLabel,
 } from "./countryLabels";
@@ -310,7 +311,10 @@ export function Globe(p: Props) {
         continue;
       const xy = proj([lon, lat]);
       if (!xy) continue;
-      const [x, y] = xy;
+      // Straight-edged markers show subpixel drift as a shimmer under
+      // rotation; hold them to device pixels like the labels.
+      const x = snapToPixel(xy[0], dpr),
+        y = snapToPixel(xy[1], dpr);
       if (x < 0 || x > w || y < 0 || y > h) continue;
       if (o.kind === "detection" && (p.objects?.length || 0) > 2000) {
         const key = Math.floor(x / 18) + "," + Math.floor(y / 18);
@@ -353,7 +357,7 @@ export function Globe(p: Props) {
       objectHits.current.push(cluster);
     }
     if (p.countries) {
-      const occupied = [
+      const markers = [
         ...hits.current.map((hit) => ({
           left: hit.x - hit.r - 6,
           right: hit.x + hit.r + 6,
@@ -367,6 +371,13 @@ export function Globe(p: Props) {
           bottom: hit.y + 12,
         })),
       ];
+      type Box = { left: number; right: number; top: number; bottom: number };
+      const placed: Box[] = [];
+      const overlaps = (box: Box, other: Box) =>
+        box.left < other.right &&
+        box.right > other.left &&
+        box.top < other.bottom &&
+        box.bottom > other.top;
       ctx.save();
       ctx.font = "12px sans-serif";
       ctx.textAlign = "center";
@@ -380,35 +391,36 @@ export function Globe(p: Props) {
           continue;
         const point = proj(country.coordinate);
         if (!point) continue;
-        const leftToRight = snapToPixel(point[0], dpr),
-          topToBottom = snapToPixel(point[1], dpr);
+        const leftToRight = snapToPixel(point[0], dpr);
         const halfWidth = ctx.measureText(country.name).width / 2 + 4;
-        const box = {
-          left: leftToRight - halfWidth,
-          right: leftToRight + halfWidth,
-          top: topToBottom - 9,
-          bottom: topToBottom + 9,
-        };
-        if (
-          box.left < 4 ||
-          box.right > w - 4 ||
-          box.top < 4 ||
-          box.bottom > h - 4
-        )
-          continue;
-        if (
-          occupied.some(
-            (other) =>
-              box.left < other.right &&
-              box.right > other.left &&
-              box.top < other.bottom &&
-              box.bottom > other.top,
+        // Labels never cover each other, but a marker cluster on the anchor
+        // is a cost rather than a veto: take a clear anchor when one exists,
+        // otherwise the least-covered one, so a busy country keeps its name.
+        let best: { y: number; box: Box; cost: number } | null = null;
+        for (const offset of labelOffsets) {
+          const topToBottom = snapToPixel(point[1] + offset, dpr);
+          const box = {
+            left: leftToRight - halfWidth,
+            right: leftToRight + halfWidth,
+            top: topToBottom - 9,
+            bottom: topToBottom + 9,
+          };
+          if (
+            box.left < 4 ||
+            box.right > w - 4 ||
+            box.top < 4 ||
+            box.bottom > h - 4
           )
-        )
-          continue;
-        occupied.push(box);
-        ctx.strokeText(country.name, leftToRight, topToBottom);
-        ctx.fillText(country.name, leftToRight, topToBottom);
+            continue;
+          if (placed.some((other) => overlaps(box, other))) continue;
+          const cost = markers.filter((other) => overlaps(box, other)).length;
+          if (!best || cost < best.cost) best = { y: topToBottom, box, cost };
+          if (cost === 0) break;
+        }
+        if (!best) continue;
+        placed.push(best.box);
+        ctx.strokeText(country.name, leftToRight, best.y);
+        ctx.fillText(country.name, leftToRight, best.y);
       }
       ctx.restore();
     }
