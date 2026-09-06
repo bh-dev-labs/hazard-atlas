@@ -5,6 +5,7 @@ import { Globe, type Camera } from "./Globe";
 import { Workspace } from "./Workspace";
 import { sources } from "./content";
 import { csvCell, download, type Dataset, type Event } from "./model";
+import { defaultSection } from "./data";
 import {
   fireObjects,
   fireSources,
@@ -58,6 +59,7 @@ function FireExplorer(p: {
     [detLayer, setDetLayer] = useState(true),
     [eqLayer, setEqLayer] = useState(true),
     [flat, setFlat] = useState(false),
+    [countries, setCountries] = useState(false),
     [auto, setAuto] = useState(false),
     [wanted, setWanted] = useState(false),
     [speed, setSpeed] = useState(1);
@@ -660,6 +662,14 @@ function FireExplorer(p: {
           />
           ■ Thermal detections
         </label>
+        <label>
+          <input
+            type="checkbox"
+            checked={countries}
+            onChange={(e) => setCountries(e.currentTarget.checked)}
+          />
+          Country names
+        </label>
       </fieldset>
       <p class="muted">
         Symbols identify record type, not a shared severity scale. Camera
@@ -833,6 +843,8 @@ function FireExplorer(p: {
         setCamera={setCamera}
         flat={flat}
         plates={false}
+        countries={countries}
+        transect={defaultSection}
         region={
           det?.coverage ? { ...det.coverage, name: "Detection coverage" } : null
         }

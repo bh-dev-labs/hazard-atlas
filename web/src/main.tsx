@@ -8,6 +8,7 @@ import {
 } from "preact/hooks";
 import { Globe, type Camera } from "./Globe";
 import { Analysis } from "./Analysis";
+import { TransectEditor } from "./TransectEditor";
 import { EventTable } from "./EventTable";
 import { SelectedEvent } from "./SelectedEvent";
 import { Replay } from "./Replay";
@@ -29,6 +30,22 @@ import {
   type Filters,
   type Region,
 } from "./model";
+import {
+  clampPage,
+  defaultSection,
+  type Section,
+  errorMessage,
+  freshDetail,
+  parseDataset,
+  parseDetail,
+  parseSnapshot,
+  record,
+  type CachedDetail,
+  type Detail,
+  type Progress,
+  parseView,
+  queryURL,
+} from "./data";
 import "./style.css";
 const repository = "https://github.com/bruce-hoppe_uoft/hazard-atlas";
 type SortKey = "mag" | "place" | "depth" | "time" | "status";
@@ -67,6 +84,7 @@ export function EarthquakeApp({ active = true }: { active?: boolean }) {
     [camera, setCamera] = useState<Camera>({ lon: 150, lat: 15, zoom: 1 }),
     [flat, setFlat] = useState(false),
     [plates, setPlates] = useState(false),
+    [countries, setCountries] = useState(false),
     [selected, setSelected] = useState<Event | null>(null),
     [auto, setAuto] = useState(storedAuto),
     [autoWanted, setAutoWanted] = useState(storedAuto),
@@ -79,27 +97,32 @@ export function EarthquakeApp({ active = true }: { active?: boolean }) {
     [lesson, setLesson] = useState(-1),
     [step, setStep] = useState(0),
     [section, setSection] = useState(false),
+    [transect, setTransect] = useState<Section>(defaultSection),
     [sort, setSort] = useState<SortKey>("time"),
     [descending, setDescending] = useState(true),
     [page, setPage] = useState(0),
     [start, setStart] = useState("2023-02-06"),
     [end, setEnd] = useState("2023-02-13"),
     [history, setHistory] = useState(false),
-    [detail, setDetail] = useState<any>(null),
+    [detail, setDetail] = useState<Detail | null>(null),
     [detailError, setDetailError] = useState(""),
     [detailBusy, setDetailBusy] = useState(false),
     [near, setNear] = useState(false),
     [nearRadius, setNearRadius] = useState(300),
     [nearHours, setNearHours] = useState(24),
     [zone, setZone] = useState("UTC"),
-    [version, setVersion] = useState("");
+    [version, setVersion] = useState(""),
+    [progress, setProgress] = useState<Progress | null>(null);
   const abort = useRef<AbortController | null>(null),
     selectionToken = useRef(0),
-    cache = useRef(new Map<string, any>()),
+    cache = useRef(new Map<string, CachedDetail>()),
     saved = useRef<any>(null),
     detailHeading = useRef<HTMLHeadingElement>(null),
     selectionOrigin = useRef<HTMLElement | null>(null),
     request = useRef(0),
+    pendingSelection = useRef(""),
+    poll = useRef<ReturnType<typeof setInterval> | null>(null),
+    job = useRef<string | null>(null),
     initialized = useRef(false),
     loadRef = useRef<any>(null);
   const modalState = useRef(textPage);
@@ -130,26 +153,94 @@ export function EarthquakeApp({ active = true }: { active?: boolean }) {
     setFilters((f) => ({ ...f, [key]: value }));
     setPage(0);
   };
+  function stopPolling() {
+    if (poll.current) clearInterval(poll.current);
+    poll.current = null;
+  }
+  // The server keeps partitioning USGS requests after the browser walks away,
+  // so an abandoned historical search is cancelled on the server too.
+  function releaseJob() {
+    if (!job.current) return;
+    void fetch("/api/history/jobs/" + job.current, { method: "DELETE" }).catch(
+      () => {},
+    );
+    job.current = null;
+  }
+  function cancelLoad() {
+    stopPolling();
+    releaseJob();
+    abort.current?.abort();
+    request.current++;
+    setBusy(false);
+    setProgress((previous) =>
+      previous ? { ...previous, state: "cancelled" } : null,
+    );
+  }
   async function load(next: string, url?: string) {
     abort.current?.abort();
+    stopPolling();
+    releaseJob();
     const controller = new AbortController();
     abort.current = controller;
     const ticket = ++request.current;
     setBusy(true);
     setError("");
+    setProgress(null);
     setPlaying(false);
+    let target =
+      url || (next === "demo" ? "/api/demo" : "/api/recent?period=" + next);
+    let poller: (() => Promise<void>) | null = null;
     try {
-      const response = await fetch(
-        url || (next === "demo" ? "/api/demo" : "/api/recent?period=" + next),
-        { signal: controller.signal },
-      );
-      const d = await response.json();
-      if (!response.ok) throw Error(d.error || "Data retrieval failed");
+      if (next === "history") {
+        const id = crypto.randomUUID();
+        job.current = id;
+        target += (target.includes("?") ? "&" : "?") + "job=" + id;
+        setProgress({
+          id,
+          state: "running",
+          requests: 0,
+          partitions: 0,
+          events: 0,
+        });
+        const update = async () => {
+          try {
+            const response = await fetch("/api/history/jobs/" + id, {
+              signal: controller.signal,
+            });
+            if (response.ok) {
+              const value = await response.json();
+              if (ticket === request.current) setProgress(value);
+            }
+          } catch {}
+        };
+        poller = update;
+        poll.current = setInterval(() => void update(), 500);
+      }
+      const response = await fetch(target, { signal: controller.signal });
+      const body = await response.json();
+      stopPolling();
+      if (poller) await poller();
+      if (!response.ok)
+        throw Error(
+          (record(body) && typeof body.error === "string" && body.error) ||
+            "Data retrieval failed",
+        );
       if (ticket !== request.current) return;
+      const d = parseDataset(body);
+      job.current = null;
       setDataset(d);
       setMode(next);
       setCursor(Infinity);
       setPage(0);
+      setProgress((previous) =>
+        previous
+          ? {
+              ...previous,
+              state: "complete",
+              events: d.data.features.length,
+            }
+          : null,
+      );
       setSelected((prev) => {
         if (!prev) return prev;
         const current = d.data.features.find(
@@ -169,7 +260,14 @@ export function EarthquakeApp({ active = true }: { active?: boolean }) {
         return current || prev;
       });
     } catch (e: any) {
-      if (e.name !== "AbortError") setError(e.message);
+      stopPolling();
+      if (e.name !== "AbortError" && ticket === request.current) {
+        const text = errorMessage(e);
+        setError(text);
+        setProgress((previous) =>
+          previous ? { ...previous, state: "failed", error: text } : null,
+        );
+      }
     } finally {
       if (ticket === request.current) setBusy(false);
     }
@@ -180,64 +278,34 @@ export function EarthquakeApp({ active = true }: { active?: boolean }) {
     initialized.current = true;
     const q = new URLSearchParams(location.search);
     try {
-      const state = JSON.parse(q.get("view") || "null");
-      if (state) {
-        if (
-          ["day", "week", "hour", "month", "demo", "history"].includes(
-            state.mode,
-          )
-        ) {
-          if (state.filters && typeof state.filters.text === "string") {
-            const f = { ...defaults, ...state.filters };
-            for (const key of ["min", "max", "depthMin", "depthMax"])
-              if (f[key] !== "" && !Number.isFinite(+f[key])) f[key] = "";
-            if (
-              f.region &&
-              ![
-                f.region.west,
-                f.region.east,
-                f.region.north,
-                f.region.south,
-              ].every(Number.isFinite)
-            )
-              f.region = null;
-            setFilters(f);
-          }
-          if (
-            state.camera &&
-            Number.isFinite(state.camera.lon) &&
-            Number.isFinite(state.camera.lat)
-          )
-            setCamera({
-              lon: Math.max(-180, Math.min(180, state.camera.lon)),
-              lat: Math.max(-85, Math.min(85, state.camera.lat)),
-              zoom: Math.max(0.65, Math.min(2.5, state.camera.zoom || 1)),
-            });
-          setFlat(!!state.flat);
-          setStart(state.start || start);
-          setEnd(state.end || end);
-          load(
-            state.mode,
-            state.mode === "history"
-              ? `/api/history?start=${encodeURIComponent(new Date(state.start).toISOString())}&end=${encodeURIComponent(new Date(state.end).toISOString())}&min=${encodeURIComponent(state.filters?.min || "-2")}`
-              : undefined,
-          ).then(() => {
-            if (state.selected) selectionToken.current = -1;
-            if (Number.isFinite(state.cursor)) setCursor(state.cursor);
-            if (state.zone) {
-              try {
-                new Intl.DateTimeFormat(undefined, { timeZone: state.zone });
-                setZone(state.zone);
-              } catch {}
-            }
-            setPlates(!!state.plates);
-            setSection(!!state.section);
-          });
-          return;
+      const raw = q.get("view");
+      if (raw) {
+        const view = parseView(JSON.parse(raw));
+        setFilters(view.filters);
+        setCamera(view.camera);
+        setFlat(view.flat);
+        if (view.query.mode === "history") {
+          setStart(view.query.start!.slice(0, 10));
+          setEnd(view.query.end!.slice(0, 10));
         }
+        load(view.query.mode, queryURL(view.query)).then(() => {
+          if (view.selected) {
+            pendingSelection.current = view.selected;
+            selectionToken.current = -1;
+          }
+          if (view.cursor !== null) setCursor(view.cursor);
+          setZone(view.zone);
+          setPlates(view.plates);
+          setCountries(view.countries);
+          setSection(view.section);
+          setTransect(view.transect);
+        });
+        return;
       }
-    } catch {
-      setMessage("The shared view was invalid; showing defaults.");
+    } catch (err) {
+      setMessage(
+        `The shared view was invalid; showing defaults. ${errorMessage(err)}`,
+      );
     }
     fetch("/api/config")
       .then((r) => r.json())
@@ -266,10 +334,8 @@ export function EarthquakeApp({ active = true }: { active?: boolean }) {
   }, [mode, busy, playing, selected, lesson]);
   useEffect(() => {
     if (dataset && selectionToken.current === -1) {
-      const state = JSON.parse(
-        new URLSearchParams(location.search).get("view") || "{}",
-      );
-      const e = dataset.data.features.find((e) => e.id === state.selected);
+      const wanted = pendingSelection.current;
+      const e = dataset.data.features.find((e) => e.id === wanted);
       selectionToken.current = 0;
       if (e) choose(e);
     }
@@ -408,34 +474,9 @@ export function EarthquakeApp({ active = true }: { active?: boolean }) {
   const stableExport = useStable((kind: string) => exportData(kind));
   const importSnapshot = useStable(async (file: File) => {
     try {
-      if (file.size > 40 * 1024 * 1024) throw Error("Snapshot exceeds 40 MiB");
-      const d = JSON.parse(await file.text());
-      if (
-        d.type !== "FeatureCollection" ||
-        !Array.isArray(d.features) ||
-        d.features.length > 50000 ||
-        !d.features.every(
-          (e: any) =>
-            typeof e.id === "string" &&
-            e.geometry?.type === "Point" &&
-            e.geometry.coordinates?.length === 3 &&
-            e.geometry.coordinates.slice(0, 2).every(Number.isFinite) &&
-            Math.abs(e.geometry.coordinates[0]) <= 180 &&
-            Math.abs(e.geometry.coordinates[1]) <= 90 &&
-            Number.isFinite(e.properties?.time) &&
-            typeof e.properties?.place === "string",
-        )
-      )
-        throw Error("Invalid snapshot");
+      const imported = await parseSnapshot(file);
       pause();
-      setDataset({
-        id: d.metadata?.dataset || "imported",
-        query: d.metadata?.query || "Imported snapshot",
-        fetched: d.metadata?.retrieved || new Date().toISOString(),
-        complete: !!d.metadata?.complete,
-        stale: false,
-        data: d,
-      });
+      setDataset(imported);
       setMode("history");
       setFilters({ ...defaults });
       setCursor(Infinity);
@@ -443,8 +484,8 @@ export function EarthquakeApp({ active = true }: { active?: boolean }) {
       setMessage(
         "Snapshot reopened locally. No upstream retrieval was needed.",
       );
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err) {
+      setError(errorMessage(err));
     }
   });
   function closeSelection() {
@@ -459,20 +500,31 @@ export function EarthquakeApp({ active = true }: { active?: boolean }) {
     setDetail(null);
     setDetailError("");
     setDetailBusy(false);
-    if (cache.current.has(e.id)) {
-      setDetail(cache.current.get(e.id));
+    // A cached detail is reused only while it is under five minutes old and
+    // still describes the revision of the event we are showing.
+    const cached = cache.current.get(e.id);
+    if (freshDetail(cached, e.properties.updated)) {
+      setDetail(cached.detail);
       return;
     }
     setDetailBusy(true);
     try {
-      const r = await fetch("/api/detail/" + encodeURIComponent(e.id));
-      const d = await r.json();
-      if (!r.ok) throw Error(d.error);
-      cache.current.set(e.id, d);
-      if (token === selectionToken.current) setDetail(d);
-    } catch (err: any) {
-      if (token === selectionToken.current)
-        setDetailError(err.message || "Additional observations unavailable");
+      const response = await fetch("/api/detail/" + encodeURIComponent(e.id));
+      const body = await response.json();
+      if (!response.ok)
+        throw Error(
+          (record(body) && typeof body.error === "string" && body.error) ||
+            "Additional observations unavailable",
+        );
+      const parsed = parseDetail(body, e.id);
+      cache.current.set(e.id, {
+        detail: parsed,
+        fetched: Date.now(),
+        updated: e.properties.updated,
+      });
+      if (token === selectionToken.current) setDetail(parsed);
+    } catch (err) {
+      if (token === selectionToken.current) setDetailError(errorMessage(err));
     } finally {
       if (token === selectionToken.current) setDetailBusy(false);
     }
@@ -549,7 +601,9 @@ export function EarthquakeApp({ active = true }: { active?: boolean }) {
       cursor: Number.isFinite(cursor) ? cursor : null,
       zone,
       plates,
+      countries,
       section,
+      transect,
     };
     const u = new URL(location.href);
     u.search = "";
@@ -588,6 +642,7 @@ export function EarthquakeApp({ active = true }: { active?: boolean }) {
         ? { event: selected?.id, radiusKm: nearRadius, hours: nearHours }
         : null,
       timeZone: zone,
+      transect: section ? transect : null,
       sha256: hash,
       fieldDefinitions: {
         coordinates: "longitude degrees, latitude degrees, source depth km",
@@ -677,6 +732,8 @@ export function EarthquakeApp({ active = true }: { active?: boolean }) {
         selected,
         cursor,
         plates,
+        countries,
+        transect,
         flat,
       };
     pause();
@@ -685,6 +742,7 @@ export function EarthquakeApp({ active = true }: { active?: boolean }) {
     setSelected(null);
     setFilters({ ...defaults });
     setSection(i === 1);
+    setTransect(defaultSection);
     await load("demo");
     if (session !== lessonSession.current) return;
     if (i === 1) focusRegion(regions[3]);
@@ -707,6 +765,8 @@ export function EarthquakeApp({ active = true }: { active?: boolean }) {
       setSelected(s.selected);
       setCursor(s.cursor);
       setPlates(s.plates);
+      setCountries(s.countries);
+      setTransect(s.transect);
       setFlat(s.flat);
     }
     setLesson(-1);
@@ -871,6 +931,16 @@ export function EarthquakeApp({ active = true }: { active?: boolean }) {
                 </p>
               </form>
             )}
+            {progress && (
+              <div class="notice retrieval-progress" role="status">
+                Historical retrieval: {progress.state} · {progress.requests}{" "}
+                upstream requests · {progress.partitions} completed partitions ·{" "}
+                {progress.events} observations
+                {progress.state === "running" && (
+                  <progress aria-label="Historical retrieval in progress" />
+                )}
+              </div>
+            )}
             {busy && (
               <div class="notice" role="status">
                 {dataset
@@ -878,8 +948,7 @@ export function EarthquakeApp({ active = true }: { active?: boolean }) {
                   : "Loading USGS observations…"}{" "}
                 <button
                   onClick={() => {
-                    abort.current?.abort();
-                    setBusy(false);
+                    cancelLoad();
                     setMessage("Retrieval cancelled.");
                   }}
                 >
@@ -1001,6 +1070,9 @@ export function EarthquakeApp({ active = true }: { active?: boolean }) {
               setFlat={setFlat}
               plates={plates}
               setPlates={setPlates}
+              countries={countries}
+              setCountries={setCountries}
+              transect={transect}
               region={filters.region}
               section={section}
               auto={auto}
@@ -1030,6 +1102,7 @@ export function EarthquakeApp({ active = true }: { active?: boolean }) {
                   detailError={detailError}
                   getDetail={stableGetDetail}
                   products={products}
+                  detail={detail}
                   detailLoaded={!!detail}
                   fetched={dataset?.fetched || ""}
                   centreOnSelection={centreOnSelection}
@@ -1121,7 +1194,7 @@ export function EarthquakeApp({ active = true }: { active?: boolean }) {
               selectedId={selected?.id || ""}
               choose={stableChoose}
               displayTime={stableDisplayTime}
-              page={page}
+              page={clampPage(page, filtered.length)}
               setPage={setPage}
               hasDataset={!!dataset}
               exportData={stableExport}
@@ -1132,14 +1205,22 @@ export function EarthquakeApp({ active = true }: { active?: boolean }) {
               selected={selected?.id || ""}
               select={stableChoose}
               section={section}
+              sectionConfig={transect}
               query={dataset?.query || ""}
             />
             <div class="chart-actions">
               <button onClick={chartExport}>Export timeline SVG</button>
               <button onClick={() => setSection(!section)}>
-                {section ? "Hide" : "Show"} Tonga depth section
+                {section ? "Hide" : "Show"} depth section
               </button>
             </div>
+            {section && (
+              <TransectEditor
+                value={transect}
+                selected={selected}
+                onApply={setTransect}
+              />
+            )}
           </>
         }
       />

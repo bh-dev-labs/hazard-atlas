@@ -1,6 +1,7 @@
 import { memo } from "preact/compat";
 import { Globe, type Camera } from "./Globe";
 import { color, type Event, type Region } from "./model";
+import { type Section } from "./data";
 
 type Props = {
   events: Event[];
@@ -12,6 +13,9 @@ type Props = {
   setFlat: (v: boolean) => void;
   plates: boolean;
   setPlates: (v: boolean) => void;
+  countries: boolean;
+  setCountries: (v: boolean) => void;
+  transect: Section;
   region: Region | null;
   section: boolean;
   auto: boolean;
@@ -32,6 +36,9 @@ function EarthPanelView({
   setFlat,
   plates,
   setPlates,
+  countries,
+  setCountries,
+  transect,
   region,
   section,
   auto,
@@ -63,6 +70,8 @@ function EarthPanelView({
         setCamera={setCamera}
         flat={flat}
         plates={plates}
+        countries={countries}
+        transect={transect}
         region={region}
         section={section}
         auto={auto}
@@ -171,6 +180,14 @@ function EarthPanelView({
             onChange={(e) => setPlates(e.currentTarget.checked)}
           />{" "}
           Plate boundaries
+        </label>
+        <label>
+          <input
+            type="checkbox"
+            checked={countries}
+            onChange={(e) => setCountries(e.currentTarget.checked)}
+          />{" "}
+          Country names
         </label>
       </div>
       <p class="legend">

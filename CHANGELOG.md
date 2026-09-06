@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- Optional country names on the globe and flat map, in both the earthquake view and the hazard atlas; labels drop the far side of the globe, skip event and detection markers, and travel in the shared view link.
+- Fixed unstable snapshot identity: history results with tied timestamps came out of an unordered map in a different order each run, so an unchanged query produced a different content-addressed dataset ID.
+- Shared views, reopened snapshots and API responses are validated before they reach state or the renderer; a snapshot carrying a `sha256` is verified against its own observations, and malformed input preserves the loaded dataset instead of drawing from it.
+- Historical retrieval reports upstream requests, completed partitions and running event counts, and Cancel retrieval now cancels the job on the server rather than only abandoning the browser request. A cancelled run is never stored as a complete dataset.
+- Historical intervals are normalized to UTC, reject submillisecond boundaries, and require at least one millisecond.
+- Event details show source-reported uncertainty and quality: horizontal, depth and magnitude error, azimuthal gap, travel-time residual RMS, nearest-station distance and stations used, distinguishing unavailable from zero.
+- Depth sections take a custom great-circle transect with an editable corridor width, drawn on the globe and carried in shared views and export metadata; the section chart scales to the observed depths and pages its event list.
+- Event detail responses are cached for five minutes and invalidated when USGS revises the event, instead of being kept forever.
+- Table pagination clamps when results shrink, so a narrowed replay or filter no longer shows an empty page.
+- `npm run test:browser` builds the real binary, runs it on an ephemeral port against a temporary database, and drives these paths end to end.
 - Attribution links to the repository instead of publishing an email address, and states that the project is independent of the University of Toronto and the USGS.
 - The release string is single-sourced from `package.json` and reaches Go through `-ldflags`; an unflagged build reports `dev`.
 - Colour moved to CSS custom properties with a dark theme, and depth now uses one sequential light-to-dark ramp instead of three unrelated hues.

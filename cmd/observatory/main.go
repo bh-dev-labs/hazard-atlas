@@ -119,8 +119,37 @@ func main() {
 		}
 		ctx, cancel := context.WithTimeout(r.Context(), 2*time.Minute)
 		defer cancel()
-		d, e := svc.History(ctx, a, b, m)
+		var d observatory.Dataset
+		var e error
+		if job := q.Get("job"); job != "" {
+			d, e = svc.HistoryTracked(ctx, a, b, m, job)
+		} else {
+			d, e = svc.History(ctx, a, b, m)
+		}
 		reply(w, d, e)
+	})
+	mux.HandleFunc("GET /api/history/jobs/{id}", func(w http.ResponseWriter, r *http.Request) {
+		p, found := svc.HistoryProgress(r.PathValue("id"))
+		if !found {
+			w.WriteHeader(404)
+			reply(w, nil, nil)
+			return
+		}
+		reply(w, p, nil)
+	})
+	mux.HandleFunc("DELETE /api/history/jobs/{id}", func(w http.ResponseWriter, r *http.Request) {
+		// A cancellation changes server state, so it must come from our own page.
+		if r.Header.Get("Origin") != "http://"+r.Host || r.Header.Get("Sec-Fetch-Site") != "same-origin" {
+			w.WriteHeader(403)
+			reply(w, nil, nil)
+			return
+		}
+		if !svc.CancelHistory(r.PathValue("id")) {
+			w.WriteHeader(404)
+			reply(w, nil, nil)
+			return
+		}
+		reply(w, map[string]bool{"cancellationRequested": true}, nil)
 	})
 	mux.HandleFunc("GET /api/detail/{id}", func(w http.ResponseWriter, r *http.Request) {
 		id := r.PathValue("id")

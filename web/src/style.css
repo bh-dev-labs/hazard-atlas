@@ -1101,6 +1101,51 @@ th[aria-sort="descending"] .sort-header {
 .reports {
   margin: 0 0 8px;
 }
+.transect-editor {
+  margin: 16px 30px 28px;
+}
+.transect-editor fieldset {
+  min-width: 0;
+  border: 1px solid var(--line);
+  padding: 16px;
+}
+.transect-editor legend {
+  padding: 0 8px;
+}
+.transect-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 180px), 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
+}
+.transect-fields label {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 5px;
+  min-width: 0;
+}
+.transect-editor .transect-fields input {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+}
+.retrieval-progress {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+.retrieval-progress progress {
+  accent-color: var(--accent);
+  max-width: 100%;
+}
+.uncertainty dd {
+  overflow-wrap: anywhere;
+}
+.uncertainty dl {
+  margin: 14px 0;
+}
 .products h4 {
   margin: 14px 0 6px;
   font-size: 14px;

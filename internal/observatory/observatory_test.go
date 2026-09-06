@@ -273,3 +273,117 @@ func TestInvalidID(t *testing.T) {
 		t.Fatal("valid ID rejected")
 	}
 }
+
+func TestHistoryTimestampTiesKeepSnapshotIdentity(t *testing.T) {
+	store, err := Open(filepath.Join(t.TempDir(), "db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.DB.Close()
+	collection, err := Parse(fixture("1", "2", 3))
+	if err != nil {
+		t.Fatal(err)
+	}
+	base := collection.Features[0]
+	collection.Features = nil
+	for i := 31; i >= 0; i-- {
+		event := base
+		event.ID = fmt.Sprintf("us-%02d", i)
+		collection.Features = append(collection.Features, event)
+	}
+	raw, err := json.Marshal(collection)
+	if err != nil {
+		t.Fatal(err)
+	}
+	service := NewService(store)
+	service.Client.Transport = transport(func(*http.Request) (*http.Response, error) {
+		return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(string(raw))), Header: make(http.Header)}, nil
+	})
+	var previous string
+	for attempt := 0; attempt < 3; attempt++ {
+		result, err := service.History(context.Background(), time.UnixMilli(1000), time.UnixMilli(5000), 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		parsed, err := Parse(result.Data)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for i, event := range parsed.Features {
+			if event.ID != fmt.Sprintf("us-%02d", i) {
+				t.Fatalf("timestamp ties are not canonical: %s at %d", event.ID, i)
+			}
+		}
+		if previous != "" && previous != result.ID {
+			t.Fatal("unchanged history changed snapshot ID")
+		}
+		previous = result.ID
+	}
+}
+
+func TestHistoryOffsetsAndProgress(t *testing.T) {
+	store, err := Open(filepath.Join(t.TempDir(), "db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.DB.Close()
+	service := NewService(store)
+	service.Client.Transport = transport(func(request *http.Request) (*http.Response, error) {
+		query := request.URL.Query()
+		if query.Get("starttime") != "1970-01-01T00:00:01.000Z" || query.Get("endtime") != "1970-01-01T00:00:04.999Z" {
+			t.Errorf("wrong UTC interval: %v", query)
+		}
+		return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(string(fixture("1", "2", 3)))), Header: make(http.Header)}, nil
+	})
+	zone := time.FixedZone("offset", 5*3600)
+	result, err := service.HistoryTracked(context.Background(), time.UnixMilli(1000).In(zone), time.UnixMilli(5000).In(zone), 0, "utc-test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(result.Query, "1970-01-01T00:00:01Z") {
+		t.Fatal(result.Query)
+	}
+	progress, exists := service.HistoryProgress("utc-test")
+	if !exists || progress.State != "complete" || progress.Requests != 1 || progress.Partitions != 1 || progress.Events != 1 {
+		t.Fatalf("bad progress: %+v", progress)
+	}
+	if _, err = service.History(context.Background(), time.UnixMilli(1000).Add(time.Nanosecond), time.UnixMilli(5000), 0); err == nil {
+		t.Fatal("submillisecond boundary accepted")
+	}
+}
+
+func TestTrackedHistoryCancellation(t *testing.T) {
+	store, err := Open(filepath.Join(t.TempDir(), "db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.DB.Close()
+	service := NewService(store)
+	started := make(chan struct{})
+	service.Client.Transport = transport(func(request *http.Request) (*http.Response, error) {
+		close(started)
+		<-request.Context().Done()
+		return nil, request.Context().Err()
+	})
+	done := make(chan error, 1)
+	go func() {
+		_, err := service.HistoryTracked(context.Background(), time.UnixMilli(1000), time.UnixMilli(5000), 0, "cancel-test")
+		done <- err
+	}()
+	<-started
+	if !service.CancelHistory("cancel-test") {
+		t.Fatal("cancel missing")
+	}
+	if err := <-done; err == nil {
+		t.Fatal("cancel succeeded unexpectedly")
+	}
+	progress, _ := service.HistoryProgress("cancel-test")
+	if progress.State != "cancelled" {
+		t.Fatalf("bad state: %+v", progress)
+	}
+	var count int
+	store.DB.QueryRow("SELECT count(*) FROM datasets").Scan(&count)
+	if count != 0 {
+		t.Fatal("cancelled data published")
+	}
+}

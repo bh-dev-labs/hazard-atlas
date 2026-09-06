@@ -8,6 +8,14 @@ import {
   geoContains,
 } from "d3-geo";
 import { feature } from "topojson-client";
+import type { FeatureCollection } from "geojson";
+import { corridorLines } from "./science";
+import { type Section } from "./data";
+import {
+  countryLabels,
+  countryLabelVisible,
+  type CountryLabel,
+} from "./countryLabels";
 import {
   color,
   radius,
@@ -29,6 +37,8 @@ type Props = {
   setCamera: (c: Camera) => void;
   flat: boolean;
   plates: boolean;
+  countries: boolean;
+  transect: Section;
   region: Region | null;
   section: boolean;
   auto: boolean;
@@ -42,6 +52,7 @@ export function Globe(p: Props) {
     live = useRef(p);
   live.current = p;
   const [earth, setEarth] = useState<any>(null),
+    [countries, setCountries] = useState<CountryLabel[]>([]),
     [plates, setPlates] = useState<any>(null),
     [error, setError] = useState(""),
     [hover, setHover] = useState(""),
@@ -64,10 +75,18 @@ export function Globe(p: Props) {
   useEffect(() => {
     earthPromise ??= fetch("/data/earth.json")
       .then((r) => r.json())
-      .then((t) => feature(t, t.objects.land));
+      .then((t) => ({
+        land: feature(t, t.objects.land),
+        countries: countryLabels(
+          feature(t, t.objects.countries) as unknown as FeatureCollection,
+        ),
+      }));
     platePromise ??= fetch("/data/plates.json").then((r) => r.json());
     earthPromise
-      .then(setEarth)
+      .then((geography) => {
+        setEarth(geography.land);
+        setCountries(geography.countries);
+      })
       .catch(() =>
         setError("Geography unavailable. Event list remains usable."),
       );
@@ -206,31 +225,21 @@ export function Globe(p: Props) {
       ctx.setLineDash([]);
     }
     if (p.section) {
+      const corridor = corridorLines(p.transect);
       ctx.beginPath();
-      path({
-        type: "LineString",
-        coordinates: [
-          [170, -22],
-          [-170, -22],
-        ],
-      });
+      path({ type: "LineString", coordinates: corridor.coordinates[0] || [] });
       ctx.strokeStyle = token("--ink");
       ctx.lineWidth = 3;
       ctx.stroke();
-      for (const lat of [-20.2, -23.8]) {
-        ctx.beginPath();
-        path({
-          type: "LineString",
-          coordinates: [
-            [170, lat],
-            [-170, lat],
-          ],
-        });
-        ctx.setLineDash([4, 4]);
-        ctx.lineWidth = 1;
-        ctx.stroke();
-        ctx.setLineDash([]);
-      }
+      ctx.beginPath();
+      path({
+        type: "MultiLineString",
+        coordinates: corridor.coordinates.slice(1),
+      });
+      ctx.setLineDash([4, 4]);
+      ctx.lineWidth = 1;
+      ctx.stroke();
+      ctx.setLineDash([]);
     }
     hits.current = [];
     const ordered = [
@@ -342,8 +351,68 @@ export function Globe(p: Props) {
       }
       objectHits.current.push(cluster);
     }
+    if (p.countries) {
+      const occupied = [
+        ...hits.current.map((hit) => ({
+          left: hit.x - hit.r - 6,
+          right: hit.x + hit.r + 6,
+          top: hit.y - hit.r - 6,
+          bottom: hit.y + hit.r + 6,
+        })),
+        ...objectHits.current.map((hit) => ({
+          left: hit.x - 12,
+          right: hit.x + 12,
+          top: hit.y - 12,
+          bottom: hit.y + 12,
+        })),
+      ];
+      ctx.save();
+      ctx.font = "12px sans-serif";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillStyle = token("--ink-strong");
+      ctx.strokeStyle = token("--globe-ocean");
+      ctx.lineWidth = 3;
+      ctx.lineJoin = "round";
+      for (const country of countries) {
+        if (!countryLabelVisible(country, [p.camera.lon, p.camera.lat], p.flat))
+          continue;
+        const point = proj(country.coordinate);
+        if (!point) continue;
+        const [leftToRight, topToBottom] = point;
+        const halfWidth = ctx.measureText(country.name).width / 2 + 4;
+        const box = {
+          left: leftToRight - halfWidth,
+          right: leftToRight + halfWidth,
+          top: topToBottom - 9,
+          bottom: topToBottom + 9,
+        };
+        if (
+          box.left < 4 ||
+          box.right > w - 4 ||
+          box.top < 4 ||
+          box.bottom > h - 4
+        )
+          continue;
+        if (
+          occupied.some(
+            (other) =>
+              box.left < other.right &&
+              box.right > other.left &&
+              box.top < other.bottom &&
+              box.bottom > other.top,
+          )
+        )
+          continue;
+        occupied.push(box);
+        ctx.strokeText(country.name, leftToRight, topToBottom);
+        ctx.fillText(country.name, leftToRight, topToBottom);
+      }
+      ctx.restore();
+    }
   }, [
     earth,
+    countries,
     plates,
     p.events,
     p.objects,
@@ -352,8 +421,10 @@ export function Globe(p: Props) {
     p.camera,
     p.flat,
     p.plates,
+    p.countries,
     p.region,
     p.section,
+    p.transect,
     size,
     theme,
     cursor,
