@@ -307,6 +307,8 @@ export function Globe(p: Props) {
         };
       }
       ctx.save();
+      const imageSmoothing = ctx.imageSmoothingEnabled;
+      ctx.imageSmoothingEnabled = false;
       for (const { label, size, halfWidth, opacity } of labelPlan.current.plan) {
         const alpha =
           opacity *
@@ -333,15 +335,18 @@ export function Globe(p: Props) {
           ink.fillText(label.name, bitmap.width / dpr / 2, bitmap.height / dpr / 2);
           labelSprites.current.set(spriteKey, bitmap);
         }
+        const left = Math.round(point[0] * dpr - bitmap.width / 2) / dpr;
+        const top = Math.round(point[1] * dpr - bitmap.height / 2) / dpr;
         ctx.globalAlpha = alpha;
         ctx.drawImage(
           bitmap,
-          point[0] - bitmap.width / dpr / 2,
-          point[1] - bitmap.height / dpr / 2,
+          left,
+          top,
           bitmap.width / dpr,
           bitmap.height / dpr,
         );
       }
+      ctx.imageSmoothingEnabled = imageSmoothing;
       ctx.restore();
     }
     hits.current = [];
