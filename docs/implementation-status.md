@@ -1,6 +1,6 @@
 # Implementation status
 
-2026-09-06 UTC. New repository; original build prompt preserved. No old code was assumed or overwritten.
+2026-09-06 UTC. Hazard Atlas 0.2.0 local release candidate. Original build prompt preserved; the earthquake source repository was inspected read-only and remains isolated.
 
 Implemented: Go executable and embedded Preact/TypeScript production interface; SQLite schema 1 and transactional revision protection; raw dataset snapshots/membership; bounded recent and partitioned historical USGS retrieval; retry/conditional request/stale recovery; same-origin API; spherical globe/2D map; rotation, zoom, picking, overlap chooser, reduced-motion control; explicit geographic bounds and current activity cells; details/product links; nearby loaded-observation filtering; cumulative replay; UTC/time-zone display; coordinated charts; CSV/GeoJSON/SVG export; snapshot import; share links; historical demo; four guided activities; linked Tonga depth section; magnitude comparison; source registry/glossary/footer credits; operations/docs/CI/release pipeline.
 
@@ -18,3 +18,5 @@ Resolved during verification:
 Sandbox-only failures: outbound downloads initially failed DNS; rerun with approved network access. TypeScript test runner and localhost listener were denied local sockets; rerun with approved process access. Exact test commands and final evidence are in release-readiness.md.
 
 Do not equate the local release candidate with full completion of every publication gate in the supplied specification. Remaining limitations are tracked explicitly in release-readiness.md. No public deployment, notarization, Windows runtime verification or external expert review is claimed.
+
+Hazard Atlas additions: full-viewport resizable Overview/Wildfires workspace; independent earthquake, EONET incident, FIRMS NOAA-20 VIIRS and Natural Resources Canada CWFIS Fire M3 layers; server-side provider adapters with SQLite snapshots, bounded queries, date-line splitting and distinct stale/failed/unconfigured/partial/empty states; incident/detection details and proximity labelling; three wildfire activities; hashed complete snapshots; typed CSV/GeoJSON exports; sources and references; separate `HazardAtlas/hazard-atlas.db` state and port 8789. Frozen fixtures include 21 EONET wildfire incidents, 97 bounded FIRMS detections, and 309 Canada CWFIS hotspot detections retrieved 2026-09-06 UTC. Live FIRMS keyed retrieval remains unverified and is a release blocker for live global detection publishing; CWFIS current-day retrieval is public but its service coverage and agency reporting limits remain visible in the source state.

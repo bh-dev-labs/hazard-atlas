@@ -1,0 +1,67 @@
+{
+  "generated": "2026-09-06T13:28:02.812Z",
+  "browser": "153.0.8010.12",
+  "sizes": [
+    {
+      "width": 1440,
+      "height": 900,
+      "scroll": 1440,
+      "scrollHeight": 900,
+      "main": 1440
+    },
+    {
+      "width": 1920,
+      "height": 1080,
+      "scroll": 1920,
+      "scrollHeight": 1080,
+      "main": 1920
+    },
+    {
+      "width": 2560,
+      "height": 1440,
+      "scroll": 2560,
+      "scrollHeight": 1440,
+      "main": 2560
+    },
+    {
+      "width": 1024,
+      "height": 900,
+      "scroll": 1024,
+      "scrollHeight": 900,
+      "main": 1024
+    },
+    {
+      "width": 390,
+      "height": 844,
+      "scroll": 390,
+      "scrollHeight": 844,
+      "main": 390
+    }
+  ],
+  "checks": [
+    "Keyboard and pointer resizing updates canvas pixel dimensions",
+    "Rotation pauses on interaction",
+    "Detection list, details, backward seek and show all",
+    "Complete hashed snapshot export and import",
+    "Three wildfire lessons, reflection and prior-view restoration",
+    "Earthquake route selection, globe/map, replay and 618-event export (lesson regression is covered by the inherited browser harness)",
+    "390px Globe/List/Learn and selection sheet",
+    "Reduced motion blocks automatic rotation",
+    "Enlarged root text without page overflow"
+  ],
+  "accessibility": [
+    {
+      "route": "Earthquakes",
+      "violations": []
+    },
+    {
+      "route": "Wildfires",
+      "violations": []
+    },
+    {
+      "route": "Sources & References",
+      "violations": []
+    }
+  ],
+  "errors": []
+}

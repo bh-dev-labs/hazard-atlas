@@ -1,68 +1,21 @@
 # Sources and verification
 
-Checked 2026-09-06 UTC (2026-09-05 local America/Toronto). Original specification carries a UTC September 6 baseline. Documentation review used official USGS pages and upstream software/asset documentation.
+Official provider documentation and data endpoints were checked 2026-09-06 UTC.
 
-## USGS GeoJSON summary feeds
-U.S. Geological Survey. [Original source](https://earthquake.usgs.gov/earthquakes/feed/v1.0/geojson.php).
-Recent observations; longitude, latitude, depth in km and UTC epoch milliseconds.
-Verification: 2026-09-06 UTC.
+| Provider or asset | Version 1 role | Boundary |
+|---|---|---|
+| [USGS GeoJSON feeds](https://earthquake.usgs.gov/earthquakes/feed/v1.0/geojson.php) | Existing recent earthquake observations | Catalog records can be revised; counts are snapshots. |
+| [USGS FDSN catalog](https://earthquake.usgs.gov/fdsnws/event/1/) | Existing bounded historical retrieval | Historical replay is reconstructed from the mutable catalog, not historical knowledge. |
+| [NASA EONET v3](https://eonet.gsfc.nasa.gov/docs/v3) | Curated wildfire incidents and original source links | `closed` is a provider status and may not be the exact physical end; geometry dates can be date-only. |
+| [NASA FIRMS Area API](https://firms.modaps.eosdis.nasa.gov/api/area/) | Bounded satellite detections | Requires a server-side MAP_KEY; Area API permits 1–5 days and has a 5,000 transaction/10-minute limit. |
+| [NASA FIRMS science guidance](https://www.earthdata.nasa.gov/data/tools/firms/faq) | Interpretation and limitations | Thermal detections do not establish perimeters, burned area, or incident membership. Confidence is product-specific. |
+| [NOAA-20 VIIRS active fire product](https://www.earthdata.nasa.gov/data/catalog/lancemodis-vj114imgtdl-nrt-2) | Initial FIRMS product | `VIIRS_NOAA20_NRT`; near-real-time data is not silently treated as a research archive. |
+| [NASA FIRMS US/Canada API](https://firms.modaps.eosdis.nasa.gov/usfs/api/) | Cross-border US/Canada satellite detections | Same MAP_KEY model; separate endpoint and product coverage from the global FIRMS service. |
+| [Natural Resources Canada CWFIS](https://cwfis.cfs.nrcan.gc.ca/) | Canada agency-reported fires and Fire M3 hotspots | Reported fires and satellite hotspots are separate products; CWFIS warns that maps are approximations and may not be current. |
+| [CWFIS data services catalogue](https://cwfis.cfs.nrcan.gc.ca/downloads/docs/en/references/cwfif/cwfis-data-placemat.pdf) | Canadian WMS/WFS/WCS layers | Includes active fires, reported fires, hotspots, perimeter estimates and National Fire Database products; services are migrating to CWFIF. |
+| [Copernicus EFFIS](https://forest-fire.emergency.copernicus.eu/applications/data-and-services) | Europe, Middle East and North Africa | Active fires, burnt areas, fire danger and severity are available through free web services with stated licensing. |
+| [Copernicus EMS Early Warning Data Store](https://ewds.climate.copernicus.eu/) | Historical and forecast global/EU forest-fire information | Registration or account access may be required for downloads; it is a data-store source, not silently treated as a live incident feed. |
 
-## USGS historical catalog
-U.S. Geological Survey. [Original source](https://earthquake.usgs.gov/fdsnws/event/1/).
-Historical intervals; at most 20,000 events per request; offsets start at 1.
-Verification: 2026-09-06 UTC.
+Frozen demo fixtures were retrieved 2026-09-06 UTC. EONET was queried for wildfire records from 2026-09-01 through 2026-09-05. The FIRMS fixture is a public NOAA-20 24-hour CSV spatial subset for 125–110°W, 30–49°N on 2026-09-05 and contains 97 detections. The CWFIS fixture is the official 2026-09-05 daily Fire M3 hotspot CSV filtered to Canada and contains 309 detections. These are attributed demonstration snapshots, not proof of complete satellite coverage. Fixture provenance is in `internal/wildfire/testdata/provenance.json`.
 
-## USGS event details
-U.S. Geological Survey. [Original source](https://earthquake.usgs.gov/earthquakes/feed/v1.0/geojson_detail.php).
-Optional event products and observations.
-Verification: 2026-09-06 UTC.
-
-## ComCat field definitions
-U.S. Geological Survey. [Original source](https://earthquake.usgs.gov/data/comcat/).
-Magnitude types, depth, review status, felt reports and intensity.
-Verification: 2026-09-06 UTC.
-
-## Magnitude, energy and shaking intensity
-U.S. Geological Survey. [Original source](https://www.usgs.gov/programs/earthquake-hazards/earthquake-magnitude-energy-release-and-shaking-intensity).
-Magnitude and intensity distinction; illustrative amplitude and approximate energy ratios.
-Verification: 2026-09-06 UTC.
-
-## Earthquake depth
-U.S. Geological Survey. [Original source](https://www.usgs.gov/faqs/what-depth-do-earthquakes-occur-what-significance-depth).
-Shallow, intermediate and deep earthquakes; subduction context.
-Verification: 2026-09-06 UTC.
-
-## Natural Earth
-Natural Earth contributors; world-atlas 2.0.2. [Original source](https://www.naturalearthdata.com/about/terms-of-use/).
-Bundled 1:110 million land, public domain; no tiles or satellite imagery.
-Verification: 2026-09-06 UTC.
-
-## PB2002 tectonic boundaries
-Peter Bird; Hugo Ahlenius / Nordpil; GeoJSON conversion by csterling. [Original source](https://github.com/fraxen/tectonicplates).
-Simplified global boundary lines, PB2002 (2003), conversion 2014. Open Data Commons Attribution License 1.0. Uniform line style; no fault attribution.
-Verification: 2026-09-06 UTC.
-
-## D3 geographic projections
-Mike Bostock and contributors. [Original source](https://d3js.org/d3-geo).
-ISC; spherical rotation, clipping and geographic paths.
-Verification: 2026-09-06 UTC.
-
-## Preact
-Preact contributors. [Original source](https://preactjs.com).
-MIT; interface components.
-Verification: 2026-09-06 UTC.
-
-## SQLite for Go
-modernc.org contributors. [Original source](https://pkg.go.dev/modernc.org/sqlite).
-BSD-3-Clause; portable persistent cache.
-Verification: 2026-09-06 UTC.
-
-- earth.json: SHA-256 2516c915867c7baf18ddec727aec46c315541a07cfb3d79a6559b05d5e94eee8
-- plates.json: SHA-256 42b3e0876a7e40f133e958ba7ab85f8851b5c693a046fbc3b138e7751863d92a
-- demo.geojson: SHA-256 5583d80bda51a78a61c191e2968a36448d3e072b015e17847a20fd36cf3104d7
-
-Historical fixture query: https://earthquake.usgs.gov/fdsnws/event/1/query?format=geojson&starttime=2023-02-06&endtime=2023-02-13&minmagnitude=4&eventtype=earthquake&orderby=time-asc
-Retrieved 2026-09-06 UTC; 618 source records. This is real historical observation data, never illustrative/synthetic. Synthetic test events exist only in tests. To reproduce, download the query to web/public/data/demo.geojson, inspect changes and regenerate asset hashes; the mutable catalog may now differ.
-Upstream place-name encoding: 125 of the 618 place descriptions contain a question mark where a non-Latin-1 letter belongs, so Nurdagi appears as `Nurda??` and Pazarcik as `Pazarc?k`. This originates at USGS, not in this application: a fresh query returns byte-identical records, and characters inside Latin-1 (Ç, á, ç, é, ë, í, ö, ü) arrive intact while Turkish g-breve, dotless i and s-cedilla do not. Place descriptions are reproduced exactly as the catalog supplies them; correcting them here would alter an observational record, so the limitation is documented instead. Coordinates, magnitudes, depths and times are unaffected.
-Geography: world-atlas 2.0.2 countries-110m.json; land object used. Plates: PB2002_boundaries.json from fraxen/tectonicplates master; exact SHA above pins the bundled version. See plate-source.md and plate-license.md.
-Plate boundary coordinates are a coarse global model, with no claimed fault-level precision. Uniform lines deliberately avoid unverified boundary-type interpretation. No map tiles or imagery are bundled.
+The withdrawn personal email footer credit is not present. The established attribution remains “Built by Bruce Hoppe · Source on GitHub,” alongside provider and geography credits. Hazard Atlas does not imply NASA, USGS, GDACS, or University of Toronto endorsement.

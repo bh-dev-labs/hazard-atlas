@@ -1,9 +1,11 @@
+import { type RenderObject } from "./wildfire";
 import { useEffect, useRef, useState } from "preact/hooks";
 import {
   geoOrthographic,
   geoEquirectangular,
   geoPath,
   geoGraticule10,
+  geoContains,
 } from "d3-geo";
 import { feature } from "topojson-client";
 import {
@@ -18,6 +20,9 @@ import {
 export type Camera = { lon: number; lat: number; zoom: number };
 type Props = {
   events: Event[];
+  objects?: RenderObject[];
+  onObject?: (o: RenderObject) => void;
+  overview?: boolean;
   selected: string;
   onSelect: (e: Event) => void;
   camera: Camera;
@@ -45,6 +50,14 @@ export function Globe(p: Props) {
     [theme, setTheme] = useState(0),
     [cursor, setCursor] = useState(""),
     [spoken, setSpoken] = useState("");
+  const objectHits = useRef<
+    { o: RenderObject; members?: RenderObject[]; x: number; y: number }[]
+  >([]);
+  const polygons = useRef<RenderObject[]>([]);
+  const invert = useRef<
+    ((p: [number, number]) => [number, number] | null) | null
+  >(null);
+  const [objectChoices, setObjectChoices] = useState<RenderObject[]>([]);
   const hits = useRef<{ e: Event; x: number; y: number; r: number }[]>([]);
   const pointers = useRef(new Map<number, [number, number]>());
   const drag = useRef({ x: 0, y: 0, moved: 0, pinch: 0, multi: false });
@@ -69,10 +82,7 @@ export function Globe(p: Props) {
     scheme.addEventListener("change", repaint);
     const ro = new ResizeObserver((es) => {
       const r = es[0].contentRect;
-      setSize([
-        r.width,
-        Math.min(820, Math.max(360, r.width * 0.7, innerHeight * 0.62)),
-      ]);
+      setSize([r.width, Math.max(120, r.height)]);
     });
     if (ref.current) ro.observe(ref.current.parentElement!);
     return () => {
@@ -127,6 +137,7 @@ export function Globe(p: Props) {
           .scale(Math.min(w, h) * 0.46 * p.camera.zoom)
           .translate([w / 2, h / 2])
           .clipAngle(90);
+    invert.current = proj.invert ? (xy) => proj.invert!(xy) : null;
     const path = geoPath(proj, ctx);
     ctx.beginPath();
     path({ type: "Sphere" });
@@ -234,10 +245,10 @@ export function Globe(p: Props) {
       if (!xy) continue;
       const [x, y] = xy;
       if (x < 0 || x > w || y < 0 || y > h) continue;
-      const r = radius(e.properties.mag);
+      const r = p.overview ? 4 : radius(e.properties.mag);
       ctx.beginPath();
       ctx.arc(x, y, r, 0, Math.PI * 2);
-      ctx.fillStyle = color(depth);
+      ctx.fillStyle = p.overview ? "#246f87" : color(depth);
       ctx.globalAlpha = p.selected && e.id !== p.selected ? 0.75 : 1;
       ctx.fill();
       ctx.globalAlpha = 1;
@@ -262,10 +273,81 @@ export function Globe(p: Props) {
       }
       hits.current.push({ e, x, y, r });
     }
+    objectHits.current = [];
+    polygons.current = [];
+    const clustered = new Map<
+      string,
+      { o: RenderObject; members: RenderObject[]; x: number; y: number }
+    >();
+    for (const o of p.objects || []) {
+      ctx.fillStyle = o.kind === "incident" ? "#ac3c20" : "#973f92";
+      ctx.strokeStyle = token("--marker-edge");
+      ctx.lineWidth = 1;
+      if (o.geometry.type === "Polygon") {
+        ctx.beginPath();
+        path(o.geometry as any);
+        ctx.globalAlpha = 0.24;
+        ctx.fill();
+        ctx.globalAlpha = 1;
+        ctx.strokeStyle = "#ac3c20";
+        ctx.lineWidth = 2;
+        ctx.stroke();
+        polygons.current.push(o);
+        continue;
+      }
+      const [lon, lat] = o.geometry.coordinates as number[];
+      if (!p.flat && !visible([lon, lat], [p.camera.lon, p.camera.lat]))
+        continue;
+      const xy = proj([lon, lat]);
+      if (!xy) continue;
+      const [x, y] = xy;
+      if (x < 0 || x > w || y < 0 || y > h) continue;
+      if (o.kind === "detection" && (p.objects?.length || 0) > 2000) {
+        const key = Math.floor(x / 18) + "," + Math.floor(y / 18);
+        const cluster = clustered.get(key);
+        if (cluster) cluster.members.push(o);
+        else clustered.set(key, { o, members: [o], x, y });
+        continue;
+      }
+      ctx.beginPath();
+      if (o.kind === "incident") {
+        ctx.moveTo(x, y - 7);
+        ctx.lineTo(x + 6, y + 5);
+        ctx.lineTo(x - 6, y + 5);
+        ctx.closePath();
+      } else {
+        ctx.rect(x - 3, y - 3, 6, 6);
+      }
+      ctx.fill();
+      ctx.stroke();
+      if (o.id === p.selected || o.id.split("@")[0] === p.selected) {
+        ctx.beginPath();
+        ctx.arc(x, y, 11, 0, Math.PI * 2);
+        ctx.strokeStyle = token("--ink");
+        ctx.lineWidth = 2;
+        ctx.stroke();
+      }
+      objectHits.current.push({ o, x, y });
+    }
+    for (const cluster of clustered.values()) {
+      const { x, y, members } = cluster;
+      ctx.fillStyle = "#973f92";
+      ctx.fillRect(x - 6, y - 6, 12, 12);
+      ctx.strokeStyle = token("--marker-edge");
+      ctx.strokeRect(x - 6, y - 6, 12, 12);
+      if (members.length > 1) {
+        ctx.font = "bold 10px sans-serif";
+        ctx.fillStyle = token("--ink");
+        ctx.fillText(String(members.length), x + 7, y + 3);
+      }
+      objectHits.current.push(cluster);
+    }
   }, [
     earth,
     plates,
     p.events,
+    p.objects,
+    p.overview,
     p.selected,
     p.camera,
     p.flat,
@@ -355,6 +437,7 @@ export function Globe(p: Props) {
         onPointerDown={(e) => {
           p.pause();
           setChoices([]);
+          setObjectChoices([]);
           ref.current!.setPointerCapture(e.pointerId);
           const q = local(e);
           pointers.current.set(e.pointerId, q);
@@ -403,11 +486,16 @@ export function Globe(p: Props) {
                 ),
               });
           } else {
+            const object = objectHits.current.find(
+              (h) => Math.hypot(x - h.x, y - h.y) < 10,
+            );
             const h = pick(x, y)[0];
             setHover(
-              h
-                ? `M ${h.e.properties.mag ?? "—"} · ${h.e.properties.place} · ${h.e.geometry.coordinates[2] ?? "Unavailable"} km · ${new Date(h.e.properties.time).toISOString()}`
-                : "",
+              object
+                ? `${object.members?.length || 1} detection/location record(s) · ${object.o.title} · ${object.o.time}`
+                : h
+                  ? `M ${h.e.properties.mag ?? "—"} · ${h.e.properties.place} · ${h.e.geometry.coordinates[2] ?? "Unavailable"} km · ${new Date(h.e.properties.time).toISOString()}`
+                  : "",
             );
           }
         }}
@@ -416,6 +504,25 @@ export function Globe(p: Props) {
           pointers.current.delete(e.pointerId);
           if (!drag.current.multi && drag.current.moved < 7) {
             const h = pick(x, y);
+            const objects = objectHits.current
+              .filter((h) => Math.hypot(x - h.x, y - h.y) < 10)
+              .flatMap((h) => h.members || [h.o]);
+            const coord = invert.current?.([x, y]);
+            if (
+              coord &&
+              (p.flat || visible(coord, [p.camera.lon, p.camera.lat]))
+            )
+              for (const o of polygons.current)
+                if (geoContains(o.geometry as any, coord)) objects.push(o);
+            if (objects.length + h.length > 1) {
+              setObjectChoices(objects);
+              setChoices(h.map((v) => v.e));
+              return;
+            }
+            if (objects.length === 1) {
+              p.onObject?.(objects[0]);
+              return;
+            }
             if (h.length === 1) p.onSelect(h[0].e);
             else if (h.length > 1) setChoices(h.map((v) => v.e));
           }
@@ -445,10 +552,37 @@ export function Globe(p: Props) {
         </div>
       )}
       {error && <p role="status">{error}</p>}
-      {choices.length > 0 && (
+      {(choices.length > 0 || objectChoices.length > 0) && (
         <div class="chooser">
-          <strong>{choices.length} overlapping observations</strong>
-          <button onClick={() => setChoices([])}>Close chooser</button>
+          <strong>
+            {choices.length + objectChoices.length} overlapping observations
+          </strong>
+          <button
+            onClick={() => {
+              setChoices([]);
+              setObjectChoices([]);
+            }}
+          >
+            Close chooser
+          </button>
+          {objectChoices.slice(0, 100).map((o) => (
+            <button
+              key={o.id}
+              onClick={() => {
+                p.onObject?.(o);
+                setChoices([]);
+                setObjectChoices([]);
+              }}
+            >
+              {o.kind}: {o.title} · {o.time}
+            </button>
+          ))}
+          {objectChoices.length > 100 && (
+            <p>
+              First 100 detections shown. Zoom in or use the detection list to
+              inspect every record.
+            </p>
+          )}
           {choices.map((e) => (
             <button
               key={e.id}

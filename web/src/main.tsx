@@ -1,4 +1,4 @@
-import { render } from "preact";
+import { Workspace } from "./Workspace";
 import {
   useEffect,
   useRef,
@@ -30,7 +30,7 @@ import {
   type Region,
 } from "./model";
 import "./style.css";
-const repository = "https://github.com/bruce-hoppe_uoft/earthquake-observatory";
+const repository = "https://github.com/bruce-hoppe_uoft/hazard-atlas";
 type SortKey = "mag" | "place" | "depth" | "time" | "status";
 const fmt = (v: number | null | undefined, digits = 1) =>
   v == null ? "Unavailable" : v.toFixed(digits);
@@ -50,14 +50,14 @@ const safeURL = (s: string) => {
 const storedAuto = () => {
   try {
     return (
-      localStorage.getItem("auto") === "true" &&
+      localStorage.getItem("hazard-atlas-quake-auto") === "true" &&
       !matchMedia("(prefers-reduced-motion: reduce)").matches
     );
   } catch {
     return false;
   }
 };
-function App() {
+export function EarthquakeApp({ active = true }: { active?: boolean }) {
   const [dataset, setDataset] = useState<Dataset | null>(null),
     [mode, setMode] = useState("day"),
     [busy, setBusy] = useState(false),
@@ -117,6 +117,15 @@ function App() {
     setAuto(false);
     setPlaying(false);
   };
+  useEffect(() => {
+    if (!active) {
+      pause();
+      return;
+    }
+    if (autoWanted && !matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      setAuto(true);
+    }
+  }, [active]);
   const change = (key: keyof Filters, value: any) => {
     setFilters((f) => ({ ...f, [key]: value }));
     setPage(0);
@@ -469,6 +478,7 @@ function App() {
     }
   }
   function choose(e: Event) {
+    window.dispatchEvent(new window.Event("hazard-atlas-selection"));
     // Clicking the selected earthquake again clears it: on a chart or the
     // globe there is nothing else to click, and the close control is at the
     // top of a panel the reader may have scrolled away from.
@@ -524,7 +534,7 @@ function App() {
     const next = !auto;
     setAuto(next);
     setAutoWanted(next);
-    localStorage.setItem("auto", String(next));
+    localStorage.setItem("hazard-atlas-quake-auto", String(next));
     if (next) setPlaying(false);
   }
   async function share() {
@@ -717,541 +727,514 @@ function App() {
       <a href="#events" class="skip">
         Skip to event list
       </a>
-      <main>
-        <header>
-          <div class="brand">
-            <span class="brand-mark" aria-hidden="true">
-              ◎
-            </span>
-            <div>
-              <h1>Earthquake Observatory</h1>
-              <p>Explore our restless planet</p>
+      <Workspace
+        context={
+          <>
+            USGS · {filtered.length} earthquakes · {mode} · UTC
+          </>
+        }
+        left={
+          <>
+            <header>
+              <div class="brand">
+                <span class="brand-mark" aria-hidden="true">
+                  ◎
+                </span>
+                <div>
+                  <h2>Earthquakes</h2>
+                  <p>USGS event explorer</p>
+                </div>
+              </div>
+              <nav aria-label="Main">
+                <button
+                  class={!learn ? "active" : ""}
+                  onClick={() =>
+                    lesson >= 0 ? returnExplore() : setLearn(false)
+                  }
+                >
+                  Explore
+                </button>
+                <button
+                  class={learn ? "active" : ""}
+                  onClick={() => setLearn(true)}
+                >
+                  Learn
+                </button>
+                <button onClick={() => setTextPage("About & references")}>
+                  About
+                </button>
+              </nav>
+              <span class="status">
+                {mode === "demo"
+                  ? "Historical demonstration"
+                  : mode === "history"
+                    ? "Historical catalog"
+                    : "USGS recent observations"}
+              </span>
+            </header>
+            <div class="toolbar">
+              <label>
+                Period{" "}
+                <select
+                  value={mode}
+                  disabled={busy || lesson >= 0}
+                  onChange={(e) => {
+                    const v = e.currentTarget.value;
+                    if (v === "history") setHistory(true);
+                    else {
+                      setHistory(false);
+                      load(v);
+                    }
+                  }}
+                >
+                  <option value="hour">Past hour</option>
+                  <option value="day">Past 24 hours</option>
+                  <option value="week">Past 7 days</option>
+                  <option value="month">Past 30 days</option>
+                  <option value="history">Custom history…</option>
+                  <option value="demo">Offline historical demo</option>
+                </select>
+              </label>
+              <div
+                class="range-field"
+                role="group"
+                aria-label="Magnitude range"
+              >
+                <span class="range-label">Magnitude</span>
+                <label>
+                  from{" "}
+                  <input
+                    type="number"
+                    min="-2"
+                    max="10"
+                    step="0.1"
+                    placeholder="Any"
+                    value={filters.min}
+                    onInput={(e) => change("min", e.currentTarget.value)}
+                  />
+                </label>
+                <label>
+                  to{" "}
+                  <input
+                    type="number"
+                    min="-2"
+                    max="10"
+                    step="0.1"
+                    placeholder="Any"
+                    value={filters.max}
+                    onInput={(e) => change("max", e.currentTarget.value)}
+                  />
+                </label>
+              </div>
+              <button
+                onClick={() => load(mode)}
+                disabled={busy || mode === "history" || lesson >= 0}
+              >
+                {busy ? "Retrieving…" : "Refresh data"}
+              </button>
+              <button onClick={share}>Copy view link</button>
+              <span class="muted">{filtered.length} earthquakes</span>
             </div>
-          </div>
-          <nav aria-label="Main">
-            <button
-              class={!learn ? "active" : ""}
-              onClick={() => (lesson >= 0 ? returnExplore() : setLearn(false))}
-            >
-              Explore
-            </button>
-            <button
-              class={learn ? "active" : ""}
-              onClick={() => setLearn(true)}
-            >
-              Learn
-            </button>
-            <button onClick={() => setTextPage("About & references")}>
-              About
-            </button>
-          </nav>
-          <span class="status">
-            {mode === "demo"
-              ? "Historical demonstration"
-              : mode === "history"
-                ? "Historical catalog"
-                : "USGS recent observations"}
-          </span>
-        </header>
-        <div class="toolbar">
-          <label>
-            Period{" "}
-            <select
-              value={mode}
-              disabled={busy || lesson >= 0}
-              onChange={(e) => {
-                const v = e.currentTarget.value;
-                if (v === "history") setHistory(true);
-                else {
-                  setHistory(false);
-                  load(v);
+            {history && (
+              <form
+                class="history"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  load(
+                    "history",
+                    `/api/history?start=${encodeURIComponent(new Date(start + "T00:00:00Z").toISOString())}&end=${encodeURIComponent(new Date(end + "T00:00:00Z").toISOString())}&min=${filters.min || "-2"}`,
+                  );
+                }}
+              >
+                <label>
+                  Start, inclusive UTC{" "}
+                  <input
+                    type="date"
+                    required
+                    value={start}
+                    onInput={(e) => setStart(e.currentTarget.value)}
+                  />
+                </label>
+                <label>
+                  End, exclusive UTC{" "}
+                  <input
+                    type="date"
+                    required
+                    value={end}
+                    onInput={(e) => setEnd(e.currentTarget.value)}
+                  />
+                </label>
+                <button disabled={busy}>Retrieve history</button>
+                <p>
+                  Up to 31 days, 50,000 events and 2 minutes. A failed or
+                  cancelled search preserves the previous dataset.
+                </p>
+              </form>
+            )}
+            {busy && (
+              <div class="notice" role="status">
+                {dataset
+                  ? "Retrieving a replacement dataset; the previous snapshot remains visible."
+                  : "Loading USGS observations…"}{" "}
+                <button
+                  onClick={() => {
+                    abort.current?.abort();
+                    setBusy(false);
+                    setMessage("Retrieval cancelled.");
+                  }}
+                >
+                  Cancel retrieval
+                </button>
+              </div>
+            )}
+            {error && (
+              <div class="notice error" role="alert">
+                {error}. <button onClick={() => load(mode)}>Retry</button>
+                <button onClick={() => load("demo")}>
+                  Open offline historical demo
+                </button>
+              </div>
+            )}
+            {message && (
+              <div class="notice" role="status">
+                {message}
+                <button onClick={() => setMessage("")}>Dismiss</button>
+              </div>
+            )}
+            {dataset && (
+              <div class={"freshness " + (dataset.stale ? "stale" : "")}>
+                {dataset.stale
+                  ? "Stale cached observations — refresh failed. "
+                  : ""}
+                {mode === "demo"
+                  ? "Bundled historical observations · 6–12 February 2023 · M4+ · not live. "
+                  : ""}
+                Retrieved {new Date(dataset.fetched).toLocaleString()} ·{" "}
+                {dataset.complete ? "Retrieval complete" : "Partial retrieval"}{" "}
+                · Earthquake types only
+              </div>
+            )}
+            {learn && (
+              <section class="learning">
+                <h2>Learn with real observations</h2>
+                {lesson < 0 ? (
+                  <>
+                    <p>
+                      Four guided activities use a fixed USGS snapshot. Your
+                      exploration is restored when you return.
+                    </p>
+                    <div class="lesson-grid">
+                      {lessons.map((l, i) => (
+                        <button key={l.title} onClick={() => startLesson(i)}>
+                          {l.title}
+                        </button>
+                      ))}
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <h3>{lessons[lesson].question}</h3>
+                    <p>
+                      Step {step + 1} of 3: {lessons[lesson].steps[step]}
+                    </p>
+                    <div class="button-row">
+                      <button onClick={() => startLesson(lesson)}>
+                        Reset activity
+                      </button>
+                      <button
+                        disabled={step === 0}
+                        onClick={() => setStep(step - 1)}
+                      >
+                        Previous
+                      </button>
+                      <button
+                        onClick={() => {
+                          if (step < 2) setStep(step + 1);
+                          else
+                            setMessage(
+                              "Activity complete. Reflection: " +
+                                lessons[lesson].reflection,
+                            );
+                        }}
+                      >
+                        {step < 2 ? "Next step" : "Complete & reflect"}
+                      </button>
+                      <button onClick={returnExplore}>
+                        Return to my exploration
+                      </button>
+                    </div>
+                    <p>
+                      {lessons[lesson].explain}{" "}
+                      <a
+                        href={sources[lessons[lesson].source].url}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        Read the source
+                      </a>
+                    </p>
+                    {lesson === 1 && (
+                      <button onClick={() => setSection(!section)}>
+                        {section ? "Hide" : "Open"} depth section
+                      </button>
+                    )}
+                    {lesson === 2 && (
+                      <a href="#analysis">
+                        Open magnitude comparison in Analysis
+                      </a>
+                    )}
+                  </>
+                )}
+              </section>
+            )}
+          </>
+        }
+        center={
+          <>
+            <EarthPanel
+              events={filtered}
+              selectedId={selected?.id || ""}
+              onSelect={stableChoose}
+              camera={camera}
+              setCamera={setCamera}
+              flat={flat}
+              setFlat={setFlat}
+              plates={plates}
+              setPlates={setPlates}
+              region={filters.region}
+              section={section}
+              auto={auto}
+              autoWanted={autoWanted}
+              toggleAuto={stableToggleAuto}
+              speed={speed}
+              setSpeed={setSpeed}
+              pause={stablePause}
+            />
+          </>
+        }
+        right={
+          <>
+            {" "}
+            <aside class="details" aria-label="Earthquake information">
+              {selected ? (
+                <SelectedEvent
+                  selected={selected}
+                  inView={filtered.some((e) => e.id === selected.id)}
+                  zone={zone}
+                  displayTime={stableDisplayTime}
+                  closeSelection={stableClose}
+                  detailHeading={detailHeading}
+                  setTextPage={setTextPage}
+                  reported={reported}
+                  detailBusy={detailBusy}
+                  detailError={detailError}
+                  getDetail={stableGetDetail}
+                  products={products}
+                  detailLoaded={!!detail}
+                  fetched={dataset?.fetched || ""}
+                  centreOnSelection={centreOnSelection}
+                  share={stableShare}
+                  near={near}
+                  setNear={setNear}
+                  nearRadius={nearRadius}
+                  setNearRadius={setNearRadius}
+                  nearHours={nearHours}
+                  setNearHours={setNearHours}
+                />
+              ) : (
+                <>
+                  <p class="eyebrow">Explore the observations</p>
+                  <h2>Select an earthquake</h2>
+                  <p>
+                    Tap a marker on Earth or choose an event from the list. Its
+                    magnitude, depth and source information will appear here.
+                  </p>
+                  <div class="selection-illustration" aria-hidden="true">
+                    <span>◎</span>
+                    <div>
+                      Surface location
+                      <br />
+                      <small>↓ source depth</small>
+                    </div>
+                  </div>
+                  <h3>A moving planet, carefully observed</h3>
+                  <p>
+                    Marker colour follows one scale from light to dark: the
+                    palest markers are shallower than 70 km, the darkest are
+                    deeper than 300 km.
+                  </p>
+                  <p>
+                    The globe shows epicentres. Rotating Earth changes your
+                    viewpoint; it does not change global counts.
+                  </p>
+                  <button onClick={() => setTextPage("Glossary")}>
+                    Understand the terms
+                  </button>
+                  <hr />
+                  <h3>Start with an area</h3>
+                  <p>
+                    Choose a current activity area below to focus the globe and
+                    see its recorded earthquakes.
+                  </p>
+                </>
+              )}
+            </aside>
+          </>
+        }
+        bottom={
+          <>
+            <Replay
+              mode={mode}
+              cursor={cursor}
+              setCursor={setCursor}
+              displayTime={stableDisplayTime}
+              hasEvents={all.length > 0}
+              playing={playing}
+              setPlaying={setPlaying}
+              setAuto={setAuto}
+              lo={lo}
+              hi={hi}
+              replaySpeed={replaySpeed}
+              setReplaySpeed={setReplaySpeed}
+            />
+            <ActivityAreas
+              mode={mode}
+              areas={areas}
+              activeRegion={filters.region?.name || ""}
+              focusRegion={stableFocusRegion}
+              clearRegion={clearRegion}
+            />
+            <EventTable
+              filtered={filtered}
+              ordered={ordered}
+              zone={zone}
+              setZone={setZone}
+              filters={filters}
+              change={stableChange}
+              custom={custom}
+              focusRegion={stableFocusRegion}
+              setFilters={setFilters}
+              setNear={setNear}
+              sort={sort}
+              descending={descending}
+              sortBy={stableSortBy}
+              selectedId={selected?.id || ""}
+              choose={stableChoose}
+              displayTime={stableDisplayTime}
+              page={page}
+              setPage={setPage}
+              hasDataset={!!dataset}
+              exportData={stableExport}
+              importSnapshot={importSnapshot}
+            />
+            <Analysis
+              events={filtered}
+              selected={selected?.id || ""}
+              select={stableChoose}
+              section={section}
+              query={dataset?.query || ""}
+            />
+            <div class="chart-actions">
+              <button onClick={chartExport}>Export timeline SVG</button>
+              <button onClick={() => setSection(!section)}>
+                {section ? "Hide" : "Show"} Tonga depth section
+              </button>
+            </div>
+          </>
+        }
+      />
+      {textPage && (
+        <div class="modal-backdrop">
+          <section
+            class="modal"
+            role="dialog"
+            aria-modal="true"
+            aria-label={textPage}
+            onKeyDown={(e) => {
+              if (e.key === "Escape") {
+                e.stopPropagation();
+                setTextPage("");
+                return;
+              }
+              if (e.key === "Tab") {
+                const elements = e.currentTarget.querySelectorAll<HTMLElement>(
+                  "button,a,input,select,summary",
+                );
+                const first = elements[0],
+                  last = elements[elements.length - 1];
+                if (e.shiftKey && document.activeElement === first) {
+                  e.preventDefault();
+                  last?.focus();
+                } else if (!e.shiftKey && document.activeElement === last) {
+                  e.preventDefault();
+                  first?.focus();
                 }
-              }}
-            >
-              <option value="hour">Past hour</option>
-              <option value="day">Past 24 hours</option>
-              <option value="week">Past 7 days</option>
-              <option value="month">Past 30 days</option>
-              <option value="history">Custom history…</option>
-              <option value="demo">Offline historical demo</option>
-            </select>
-          </label>
-          <div class="range-field" role="group" aria-label="Magnitude range">
-            <span class="range-label">Magnitude</span>
-            <label>
-              from{" "}
-              <input
-                type="number"
-                min="-2"
-                max="10"
-                step="0.1"
-                placeholder="Any"
-                value={filters.min}
-                onInput={(e) => change("min", e.currentTarget.value)}
-              />
-            </label>
-            <label>
-              to{" "}
-              <input
-                type="number"
-                min="-2"
-                max="10"
-                step="0.1"
-                placeholder="Any"
-                value={filters.max}
-                onInput={(e) => change("max", e.currentTarget.value)}
-              />
-            </label>
-          </div>
-          <button
-            onClick={() => load(mode)}
-            disabled={busy || mode === "history" || lesson >= 0}
-          >
-            {busy ? "Retrieving…" : "Refresh data"}
-          </button>
-          <button onClick={share}>Copy view link</button>
-          <span class="muted">{filtered.length} earthquakes</span>
-        </div>
-        {history && (
-          <form
-            class="history"
-            onSubmit={(e) => {
-              e.preventDefault();
-              load(
-                "history",
-                `/api/history?start=${encodeURIComponent(new Date(start + "T00:00:00Z").toISOString())}&end=${encodeURIComponent(new Date(end + "T00:00:00Z").toISOString())}&min=${filters.min || "-2"}`,
-              );
+              }
             }}
           >
-            <label>
-              Start, inclusive UTC{" "}
-              <input
-                type="date"
-                required
-                value={start}
-                onInput={(e) => setStart(e.currentTarget.value)}
-              />
-            </label>
-            <label>
-              End, exclusive UTC{" "}
-              <input
-                type="date"
-                required
-                value={end}
-                onInput={(e) => setEnd(e.currentTarget.value)}
-              />
-            </label>
-            <button disabled={busy}>Retrieve history</button>
-            <p>
-              Up to 31 days, 50,000 events and 2 minutes. A failed or cancelled
-              search preserves the previous dataset.
-            </p>
-          </form>
-        )}
-        {busy && (
-          <div class="notice" role="status">
-            {dataset
-              ? "Retrieving a replacement dataset; the previous snapshot remains visible."
-              : "Loading USGS observations…"}{" "}
             <button
-              onClick={() => {
-                abort.current?.abort();
-                setBusy(false);
-                setMessage("Retrieval cancelled.");
-              }}
+              class="modal-close"
+              autoFocus
+              onClick={() => setTextPage("")}
             >
-              Cancel retrieval
+              Close
             </button>
-          </div>
-        )}
-        {error && (
-          <div class="notice error" role="alert">
-            {error}. <button onClick={() => load(mode)}>Retry</button>
-            <button onClick={() => load("demo")}>
-              Open offline historical demo
-            </button>
-          </div>
-        )}
-        {message && (
-          <div class="notice" role="status">
-            {message}
-            <button onClick={() => setMessage("")}>Dismiss</button>
-          </div>
-        )}
-        {dataset && (
-          <div class={"freshness " + (dataset.stale ? "stale" : "")}>
-            {dataset.stale
-              ? "Stale cached observations — refresh failed. "
-              : ""}
-            {mode === "demo"
-              ? "Bundled historical observations · 6–12 February 2023 · M4+ · not live. "
-              : ""}
-            Retrieved {new Date(dataset.fetched).toLocaleString()} ·{" "}
-            {dataset.complete ? "Retrieval complete" : "Partial retrieval"} ·
-            Earthquake types only
-          </div>
-        )}
-        {learn && (
-          <section class="learning">
-            <h2>Learn with real observations</h2>
-            {lesson < 0 ? (
-              <>
-                <p>
-                  Four guided activities use a fixed USGS snapshot. Your
-                  exploration is restored when you return.
-                </p>
-                <div class="lesson-grid">
-                  {lessons.map((l, i) => (
-                    <button key={l.title} onClick={() => startLesson(i)}>
-                      {l.title}
-                    </button>
-                  ))}
+            <h2>{textPage}</h2>
+            {textPage === "Glossary" ? (
+              glossary.map(([title, body]) => (
+                <div key={title}>
+                  <h3>{title}</h3>
+                  <p>{body}</p>
                 </div>
-              </>
+              ))
             ) : (
               <>
-                <h3>{lessons[lesson].question}</h3>
                 <p>
-                  Step {step + 1} of 3: {lessons[lesson].steps[step]}
+                  Earthquake Observatory {version || "…"} · local release
+                  candidate
                 </p>
-                <div class="button-row">
-                  <button onClick={() => startLesson(lesson)}>
-                    Reset activity
-                  </button>
-                  <button
-                    disabled={step === 0}
-                    onClick={() => setStep(step - 1)}
-                  >
-                    Previous
-                  </button>
-                  <button
-                    onClick={() => {
-                      if (step < 2) setStep(step + 1);
-                      else
-                        setMessage(
-                          "Activity complete. Reflection: " +
-                            lessons[lesson].reflection,
-                        );
-                    }}
-                  >
-                    {step < 2 ? "Next step" : "Complete & reflect"}
-                  </button>
-                  <button onClick={returnExplore}>
-                    Return to my exploration
-                  </button>
-                </div>
                 <p>
-                  {lessons[lesson].explain}{" "}
-                  <a
-                    href={sources[lessons[lesson].source].url}
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    Read the source
+                  Explore earthquake observations and learn how to read them. No
+                  accounts, telemetry, LLM calls, map tokens or remote fonts.
+                  Live retrieval contacts USGS through this local Go server.
+                  Clicking source links opens the source website.
+                </p>
+                <p>
+                  Built by Bruce Hoppe. Source code, licence and issue tracker:{" "}
+                  <a href={repository} target="_blank" rel="noreferrer">
+                    {repository.replace("https://", "")}
                   </a>
+                  . An independent educational project, not affiliated with or
+                  endorsed by the University of Toronto or the USGS.
                 </p>
-                {lesson === 1 && (
-                  <button onClick={() => setSection(!section)}>
-                    {section ? "Hide" : "Open"} depth section
-                  </button>
-                )}
-                {lesson === 2 && (
-                  <a href="#analysis">Open magnitude comparison in Analysis</a>
-                )}
+                {[
+                  "Earthquake observations",
+                  "Scientific explanations",
+                  "Geographic assets",
+                  "Software",
+                ].map((group) => (
+                  <section key={group}>
+                    <h3>{group}</h3>
+                    {sources
+                      .filter((s) => s.group === group)
+                      .map((s) => (
+                        <p>
+                          <a href={s.url} target="_blank" rel="noreferrer">
+                            {s.title}
+                          </a>
+                          <br />
+                          {s.author}. {s.purpose}
+                          <br />
+                          <small>Documentation checked {s.verified}</small>
+                        </p>
+                      ))}
+                  </section>
+                ))}
               </>
             )}
           </section>
-        )}
-        <section class="observatory">
-          <EarthPanel
-            events={filtered}
-            selectedId={selected?.id || ""}
-            onSelect={stableChoose}
-            camera={camera}
-            setCamera={setCamera}
-            flat={flat}
-            setFlat={setFlat}
-            plates={plates}
-            setPlates={setPlates}
-            region={filters.region}
-            section={section}
-            auto={auto}
-            autoWanted={autoWanted}
-            toggleAuto={stableToggleAuto}
-            speed={speed}
-            setSpeed={setSpeed}
-            pause={stablePause}
-          />
-          <aside class="details" aria-label="Earthquake information">
-            {selected ? (
-              <SelectedEvent
-                selected={selected}
-                inView={filtered.some((e) => e.id === selected.id)}
-                zone={zone}
-                displayTime={stableDisplayTime}
-                closeSelection={stableClose}
-                detailHeading={detailHeading}
-                setTextPage={setTextPage}
-                reported={reported}
-                detailBusy={detailBusy}
-                detailError={detailError}
-                getDetail={stableGetDetail}
-                products={products}
-                detailLoaded={!!detail}
-                fetched={dataset?.fetched || ""}
-                centreOnSelection={centreOnSelection}
-                share={stableShare}
-                near={near}
-                setNear={setNear}
-                nearRadius={nearRadius}
-                setNearRadius={setNearRadius}
-                nearHours={nearHours}
-                setNearHours={setNearHours}
-              />
-            ) : (
-              <>
-                <p class="eyebrow">Explore the observations</p>
-                <h2>Select an earthquake</h2>
-                <p>
-                  Tap a marker on Earth or choose an event from the list. Its
-                  magnitude, depth and source information will appear here.
-                </p>
-                <div class="selection-illustration" aria-hidden="true">
-                  <span>◎</span>
-                  <div>
-                    Surface location
-                    <br />
-                    <small>↓ source depth</small>
-                  </div>
-                </div>
-                <h3>A moving planet, carefully observed</h3>
-                <p>
-                  Marker colour follows one scale from light to dark: the palest
-                  markers are shallower than 70 km, the darkest are deeper than
-                  300 km.
-                </p>
-                <p>
-                  The globe shows epicentres. Rotating Earth changes your
-                  viewpoint; it does not change global counts.
-                </p>
-                <button onClick={() => setTextPage("Glossary")}>
-                  Understand the terms
-                </button>
-                <hr />
-                <h3>Start with an area</h3>
-                <p>
-                  Choose a current activity area below to focus the globe and
-                  see its recorded earthquakes.
-                </p>
-              </>
-            )}
-          </aside>
-        </section>
-        <Replay
-          mode={mode}
-          cursor={cursor}
-          setCursor={setCursor}
-          displayTime={stableDisplayTime}
-          hasEvents={all.length > 0}
-          playing={playing}
-          setPlaying={setPlaying}
-          setAuto={setAuto}
-          lo={lo}
-          hi={hi}
-          replaySpeed={replaySpeed}
-          setReplaySpeed={setReplaySpeed}
-        />
-        <ActivityAreas
-          mode={mode}
-          areas={areas}
-          activeRegion={filters.region?.name || ""}
-          focusRegion={stableFocusRegion}
-          clearRegion={clearRegion}
-        />
-        <EventTable
-          filtered={filtered}
-          ordered={ordered}
-          zone={zone}
-          setZone={setZone}
-          filters={filters}
-          change={stableChange}
-          custom={custom}
-          focusRegion={stableFocusRegion}
-          setFilters={setFilters}
-          setNear={setNear}
-          sort={sort}
-          descending={descending}
-          sortBy={stableSortBy}
-          selectedId={selected?.id || ""}
-          choose={stableChoose}
-          displayTime={stableDisplayTime}
-          page={page}
-          setPage={setPage}
-          hasDataset={!!dataset}
-          exportData={stableExport}
-          importSnapshot={importSnapshot}
-        />
-        <Analysis
-          events={filtered}
-          selected={selected?.id || ""}
-          select={stableChoose}
-          section={section}
-          query={dataset?.query || ""}
-        />
-        <div class="chart-actions">
-          <button onClick={chartExport}>Export timeline SVG</button>
-          <button onClick={() => setSection(!section)}>
-            {section ? "Hide" : "Show"} Tonga depth section
-          </button>
         </div>
-        <footer>
-          <a href={repository} target="_blank" rel="noreferrer">
-            Built by Bruce Hoppe · Source on GitHub
-          </a>
-          <div>
-            <strong>Data & references</strong>
-            <a href={sources[0].url} target="_blank" rel="noreferrer">
-              Earthquake data: USGS
-            </a>
-            <a href={sources[1].url} target="_blank" rel="noreferrer">
-              Historical catalog
-            </a>
-            <a href={sources[4].url} target="_blank" rel="noreferrer">
-              Earthquake science
-            </a>
-            <button onClick={() => setTextPage("Map & globe credits")}>
-              Map & globe credits
-            </button>
-            <button onClick={() => setTextPage("Sources & references")}>
-              All references
-            </button>
-          </div>
-          <p>
-            {mode === "demo"
-              ? "Bundled historical USGS observations, not live."
-              : "USGS observations; catalog solutions may change."}{" "}
-            An educational observatory, not a prediction or emergency warning
-            service. No USGS endorsement.
-          </p>
-          <div class="shutdown">
-            <button
-              class="quit"
-              onClick={async () => {
-                if (
-                  confirm(
-                    "Stop the local Earthquake Observatory server? The page will no longer load until you start the application again.",
-                  )
-                ) {
-                  await fetch("/api/quit", { method: "POST" });
-                  setMessage(
-                    "Observatory stopped. You can close this tab and reopen the application when needed.",
-                  );
-                }
-              }}
-            >
-              Stop the local server
-            </button>
-            <span class="muted">
-              Ends the application running on this computer.
-            </span>
-          </div>
-        </footer>
-        {textPage && (
-          <div class="modal-backdrop">
-            <section
-              class="modal"
-              role="dialog"
-              aria-modal="true"
-              aria-label={textPage}
-              onKeyDown={(e) => {
-                if (e.key === "Escape") {
-                  e.stopPropagation();
-                  setTextPage("");
-                  return;
-                }
-                if (e.key === "Tab") {
-                  const elements =
-                    e.currentTarget.querySelectorAll<HTMLElement>(
-                      "button,a,input,select,summary",
-                    );
-                  const first = elements[0],
-                    last = elements[elements.length - 1];
-                  if (e.shiftKey && document.activeElement === first) {
-                    e.preventDefault();
-                    last?.focus();
-                  } else if (!e.shiftKey && document.activeElement === last) {
-                    e.preventDefault();
-                    first?.focus();
-                  }
-                }
-              }}
-            >
-              <button
-                class="modal-close"
-                autoFocus
-                onClick={() => setTextPage("")}
-              >
-                Close
-              </button>
-              <h2>{textPage}</h2>
-              {textPage === "Glossary" ? (
-                glossary.map(([title, body]) => (
-                  <div key={title}>
-                    <h3>{title}</h3>
-                    <p>{body}</p>
-                  </div>
-                ))
-              ) : (
-                <>
-                  <p>
-                    Earthquake Observatory {version || "…"} · local release
-                    candidate
-                  </p>
-                  <p>
-                    Explore earthquake observations and learn how to read them.
-                    No accounts, telemetry, LLM calls, map tokens or remote
-                    fonts. Live retrieval contacts USGS through this local Go
-                    server. Clicking source links opens the source website.
-                  </p>
-                  <p>
-                    Built by Bruce Hoppe. Source code, licence and issue
-                    tracker:{" "}
-                    <a href={repository} target="_blank" rel="noreferrer">
-                      {repository.replace("https://", "")}
-                    </a>
-                    . An independent educational project, not affiliated with or
-                    endorsed by the University of Toronto or the USGS.
-                  </p>
-                  {[
-                    "Earthquake observations",
-                    "Scientific explanations",
-                    "Geographic assets",
-                    "Software",
-                  ].map((group) => (
-                    <section key={group}>
-                      <h3>{group}</h3>
-                      {sources
-                        .filter((s) => s.group === group)
-                        .map((s) => (
-                          <p>
-                            <a href={s.url} target="_blank" rel="noreferrer">
-                              {s.title}
-                            </a>
-                            <br />
-                            {s.author}. {s.purpose}
-                            <br />
-                            <small>Documentation checked {s.verified}</small>
-                          </p>
-                        ))}
-                    </section>
-                  ))}
-                </>
-              )}
-            </section>
-          </div>
-        )}
-      </main>
+      )}
     </>
   );
 }
-render(<App />, document.getElementById("app")!);

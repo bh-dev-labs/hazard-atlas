@@ -1,0 +1,18 @@
+{
+  "retrieved": "2026-09-06T11:23:39.518815+00:00",
+  "eonetURL": "https://eonet.gsfc.nasa.gov/api/v3/events?category=wildfires&status=all&start=2026-09-01&end=2026-09-05&limit=1000",
+  "firmsURL": "https://firms.modaps.eosdis.nasa.gov/data/active_fire/noaa-20-viirs-c2/csv/J1_VIIRS_C2_USA_contiguous_and_Hawaii_24h.csv",
+  "cwfisURL": "https://cwfis.cfs.nrcan.gc.ca/downloads/hotspots/20260905.csv",
+  "product": "VIIRS_NOAA20_NRT",
+  "bounds": [
+    -125,
+    30,
+    -110,
+    49
+  ],
+  "rows": 97,
+  "cwfisCanadaRows": 309,
+  "start": "2026-09-05",
+  "end": "2026-09-05",
+  "description": "Real public FIRMS download, spatial subset; feed coverage is not proof of uninterrupted acquisition. No incident membership inferred."
+}

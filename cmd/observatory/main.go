@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"earthquake-observatory/internal/observatory"
+	"earthquake-observatory/internal/wildfire"
 	"embed"
 	"encoding/json"
 	"flag"
@@ -33,7 +34,7 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
 	var requests atomic.Uint64
-	addr := flag.String("addr", "127.0.0.1:8787", "loopback listen address")
+	addr := flag.String("addr", "127.0.0.1:8789", "loopback listen address")
 	data := flag.String("data-dir", "", "SQLite directory")
 	demo := flag.Bool("demo", false, "start with bundled historical data")
 	noBrowser := flag.Bool("no-browser", false, "do not open browser")
@@ -45,12 +46,12 @@ func main() {
 		if err != nil {
 			panic(err)
 		}
-		*data = filepath.Join(base, "EarthquakeObservatory")
+		*data = filepath.Join(base, "HazardAtlas")
 	}
 	if err := os.MkdirAll(*data, 0700); err != nil {
 		panic(err)
 	}
-	store, err := observatory.Open(filepath.Join(*data, "observatory.db"))
+	store, err := observatory.Open(filepath.Join(*data, "hazard-atlas.db"))
 	if err != nil {
 		panic(err)
 	}
@@ -72,6 +73,11 @@ func main() {
 	svc := observatory.NewService(store)
 	static, _ := fs.Sub(assets, "dist")
 	mux := http.NewServeMux()
+	fires, err := wildfire.New(store.DB, os.Getenv("HAZARD_ATLAS_FIRMS_MAP_KEY"))
+	if err != nil {
+		panic(err)
+	}
+	mux.HandleFunc("GET /api/wildfires/{provider}", fires.Handler)
 	reply := func(w http.ResponseWriter, v any, err error) {
 		w.Header().Set("Content-Type", "application/json")
 		w.Header().Set("Cache-Control", "no-store")
@@ -179,7 +185,7 @@ func main() {
 		server.Shutdown(c)
 	}()
 	u := "http://" + listener.Addr().String()
-	slog.Info("Earthquake Observatory ready", "url", u, "data", *data)
+	slog.Info("Hazard Atlas ready", "url", u, "data", *data)
 	if !*noBrowser {
 		var c *exec.Cmd
 		switch runtime.GOOS {

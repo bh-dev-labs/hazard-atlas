@@ -1,6 +1,21 @@
-# Release readiness — 0.1.0 local candidate
+# Release readiness — Hazard Atlas 0.2.0 local candidate
 
-This is a functioning local release candidate. **It is not a claim that every publication gate in the much larger build specification is complete.** Source, runtime functionality and cross-platform archives are delivered; the remaining gates below are explicit.
+This is a functioning local release candidate. **It is not a claim that every publication gate in the much larger build specification is complete.** The earthquake baseline is preserved, and EONET, FIRMS and Natural Resources Canada CWFIS adapters are implemented.
+
+## Hazard Atlas evidence
+
+| Gate | Result and evidence |
+|---|---|
+| Baseline isolation | Original `/Users/bh/Developer/git_projects/earthquake-observatory` was clean at `600faf9`; Hazard Atlas uses port 8789, `HazardAtlas/hazard-atlas.db`, separate browser keys, and no source-project writes. See [baseline](baseline.md). |
+| Wildfire identity | `internal/wildfire` tests validate EONET IDs, product-specific FIRMS identities, repeated-row deduplication, null versus zero, malformed rows, provider status, polygon/date precision, and date-line bounds. |
+| Provider boundaries | EONET v3, FIRMS Area API and CWFIS downloads documentation checked 2026-09-06. FIRMS key is server-only, explicit regions are capped at 30° × 30° and 1–5 days, date-line queries split, CWFIS requests are one selected UTC day, bodies are bounded, redirects denied, and provider caps surface as partial states. |
+| Frozen fixtures | EONET frozen records, 97 NOAA-20 VIIRS detections and 309 Canada CWFIS Fire M3 hotspots are embedded with URLs and retrieval metadata in `internal/wildfire/testdata/`. Live FIRMS keyed access remains configuration-dependent. |
+| Workspace | Browser render at 1440×900 shows full-width panels, separate hazard symbols/counts, keyboard/pointer panel resizing, canvas pixel resizing, timeline/list, source-state panel, and no document overflow. 1920×1080, 2560×1440, 1024px and 390px screenshots are saved under `docs/screenshots/`. |
+| Wildfire lessons | Three local activities use frozen records, each with three interactions, explanation, source link, reset, and return-to-view. No incident membership, spread boundary, burned area, casualty, containment, or severity score is inferred. |
+| Reproducibility | Complete snapshot export includes both provider datasets, view/query state, coverage, and SHA-256; import validates the hash/schema and does not call providers. Separate incident/detection exports include record type, units, source IDs and metadata. |
+| Accessibility | Focusable layer controls, splitters, list alternatives, reduced-motion handling, and source links are implemented. The Hazard Atlas browser suite reports zero axe violations across Earthquakes, Wildfires and Sources. |
+
+The original earthquake browser harness remains valid for the module at its new route. Hazard Atlas browser evidence is deliberately separate because the overview adds provider state, panels, lessons and mixed-hazard exports.
 
 ## Executed evidence
 
@@ -24,7 +39,7 @@ Host: macOS arm64, Go 1.27.1, Node 26.8.1, headless Chromium 153.0.8010.12. Veri
 | Live provider | Actual recent query returned 183 observations, complete and not stale, fetched 2026-09-06T00:51:30Z. Count is a snapshot, not a lasting current count. Live historical query passed separately. |
 | Performance | 20,000 synthetic events: filtering p95 ≈0.85 ms in Node (100 measured iterations). Chromium rotation 38.0 fps, longest frame 33 ms; browser filter interactions 145–228 ms (mean 170) including Playwright overhead. Heap after ten view switches 225 MB (unforced GC, not a leak determination). Measured on an otherwise idle machine after the component split; a run competing with a release build reported 33 fps and a 193 ms mean, so treat these as indicative rather than absolute. Raw measurements in `extended-test-results.json`. |
 | Dependency vulnerabilities | `npm audit` reports zero; `go run golang.org/x/vuln/cmd/govulncheck@latest ./...` reports no vulnerabilities. Scan results are time-specific. |
-| Packaging | macOS arm64, macOS amd64 and Windows amd64 cross-builds succeeded. Extracted macOS arm64 archive passed startup, embedded assets, demo, running backup, restart, clean-directory restore and integrity checks; see `consumer-test-results.json`. Native macOS Launch Services launch, live-mode configuration and ad-hoc signature verification also passed. Windows and Intel execution remain unverified. |
+| Packaging | Hazard Atlas 0.2.0 macOS arm64, macOS amd64 and Windows amd64 cross-builds succeeded. Extracted macOS arm64 archive passed startup, embedded assets, demo, running backup, restart, clean-directory restore and integrity checks through `scripts/consumer-check.mjs`; see `consumer-test-results.json`. Native macOS Launch Services launch, live-mode configuration and ad-hoc signature verification remain local checks. Windows and Intel execution remain unverified. |
 | Upstream data quality | 125 of the 618 bundled place descriptions carry a question mark where a non-Latin-1 letter belongs (`Nurda??`, `Pazarc?k`). Verified as upstream: a fresh USGS query returns records identical to the bundled snapshot, differing only in the response's own `generated` timestamp. Descriptions are reproduced as supplied rather than corrected, because editing them would alter an observational record; see `sources.md`. Coordinates, magnitudes, depths and times are unaffected. |
 | Attribution/license | Credit `Built by Bruce Hoppe · Source on GitHub` links to the repository in the production footer and About panel, with no address published in the interface; browser check asserts footer visibility. README, QUICKSTART, MIT LICENSE and third-party notices included in archives. |
 | CI | Workflow configured for Linux/macOS/Windows; no hosted CI run is claimed. |
@@ -48,8 +63,9 @@ npm test
 npm run format:check
 go test -race ./...
 go vet ./...
-# Start demo binary at 127.0.0.1:8787, then:
+# Start demo binary at 127.0.0.1:8789, then:
 node scripts/browser-check.mjs
+node scripts/hazard-browser-check.mjs
 node scripts/extended-check.mjs
 node --experimental-strip-types scripts/filter-benchmark.mjs
 ./scripts/release.sh

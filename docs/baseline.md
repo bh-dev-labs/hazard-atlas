@@ -1,0 +1,11 @@
+# Earthquake baseline — 2026-09-06
+
+Hazard Atlas baseline: `347621e` (`first commit`), clean before the user supplied the untracked Hazard Atlas specification. Origin is the user-provided Hazard Atlas GitHub repository. Original source is read-only at `/Users/bh/Developer/git_projects/earthquake-observatory`, commit `600faf9`, clean on inspection. The main frontend matches the source byte for byte. Hazard Atlas already has an independent Git directory; no clone or source modifications are needed.
+
+Stack retained: Go, modernc SQLite, Preact, TypeScript, Vite, D3 orthographic Canvas and bundled Natural Earth/PB2002 assets. No hosting metadata, service worker, production database or deployment workflow found. CI builds/tests only. Established attribution is “Built by Bruce Hoppe · Source on GitHub”; no public email credit. Preserve original license and geography credits.
+
+Verified locally: npm ci; npm run build; npm test (8 passing); go test -race ./...; go vet ./...; compiled baseline run with -demo -no-browser and independent /private/tmp/hazard-baseline-data. Browser harness passed selection/details, activity filters, auto-rotation pause/resume, globe/map switching, replay restart/show all, 618-event GeoJSON export, earthquake lesson/return, 1024/390px overflow checks and zero axe violations. Screenshots in baseline/. No runtime errors. Filter benchmark: 20,000 repeated earthquakes, p95 0.877 ms (Node v26.8.1, macOS arm64).
+
+Observed shortcomings relative to the new brief: scrolling page with maximum width; no wildfire adapters, layered overview, desktop splitters or wildfire lessons. Existing module features are documented in the inherited implementation-status document, not inferred from its build prompt.
+
+Execution issues: first Go test started before the frontend finished and failed `pattern dist: no matching files found`; rerun after build passed. npm test initially failed local IPC `listen EPERM`; approved rerun passed. Baseline listener initially failed `bind: operation not permitted`; approved run and browser check passed. No inherited functional defect established by these checks. This is representative regression evidence, not exhaustive scientific validation.

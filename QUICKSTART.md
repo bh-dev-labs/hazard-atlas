@@ -9,9 +9,9 @@
 7. Export a GeoJSON snapshot, then reopen it. It remains usable without internet access.
 8. To demonstrate recovery, disconnect internet and refresh a previously loaded recent period. The last good dataset remains with a stale notice. Reconnect and retry. Do not interrupt someone else's connectivity merely to demonstrate this.
 
-Data lives in the operating system's user configuration directory under `EarthquakeObservatory`. No Go, Node, Python or database installation is needed for the packaged application.
+Data lives in the operating system's user configuration directory under `HazardAtlas` in `hazard-atlas.db`. The packaged application needs no Go, Node, Python or database installation.
 
 Windows: keep the console window open while using the app; Ctrl+C stops it. macOS: choose **Stop the local server** at the foot of the page when finished.
 
 
-Built by Bruce Hoppe · [github.com/bruce-hoppe_uoft/earthquake-observatory](https://github.com/bruce-hoppe_uoft/earthquake-observatory)
+Built by Bruce Hoppe · [github.com/bruce-hoppe_uoft/hazard-atlas](https://github.com/bruce-hoppe_uoft/hazard-atlas)

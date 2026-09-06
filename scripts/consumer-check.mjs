@@ -5,15 +5,15 @@ import assert from "node:assert/strict";
 const root = await fs.mkdtemp("/private/tmp/atlas-consumer-");
 execFileSync("/usr/bin/unzip", [
   "-q",
-  "release/EarthquakeObservatory-0.1.0-darwin-arm64.zip",
+  "release/HazardAtlas-0.2.0-darwin-arm64.zip",
   "-d",
   root,
 ]);
 const binary = path.join(
   root,
-  "EarthquakeObservatory-0.1.0-darwin-arm64",
-  "Earthquake Observatory.app",
-  "Contents/MacOS/earthquake-observatory",
+  "HazardAtlas-0.2.0-darwin-arm64",
+  "Hazard Atlas.app",
+  "Contents/MacOS/hazard-atlas",
 );
 const data = path.join(root, "data");
 const start = async (dir) => {
@@ -42,7 +42,7 @@ const response = await fetch("http://127.0.0.1:8790/api/demo");
 const demo = await response.json();
 assert.equal(demo.data.features.length, 618);
 const home = await fetch("http://127.0.0.1:8790/");
-assert.ok((await home.text()).includes("Earthquake Observatory"));
+assert.ok((await home.text()).includes("Hazard Atlas"));
 const ready = await (await fetch("http://127.0.0.1:8790/api/ready")).json();
 assert.equal(ready.ready, true);
 const attack = await fetch("http://127.0.0.1:8790/api/quit", {
