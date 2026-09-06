@@ -8,6 +8,8 @@ import {
   geoContains,
 } from "d3-geo";
 import { feature } from "topojson-client";
+import { parse, type Font } from "opentype.js";
+import labelFontUrl from "@fontsource/noto-sans/files/noto-sans-latin-400-normal.woff?url";
 import type { FeatureCollection } from "geojson";
 import { corridorLines } from "./science";
 import { type Section } from "./data";
@@ -49,12 +51,14 @@ type Props = {
 };
 let earthPromise: Promise<any> | null = null,
   platePromise: Promise<any> | null = null;
+let labelFontPromise: Promise<Font> | null = null;
 export function Globe(p: Props) {
   const ref = useRef<HTMLCanvasElement>(null),
     live = useRef(p);
   live.current = p;
   const [earth, setEarth] = useState<any>(null),
     [countries, setCountries] = useState<CountryLabel[]>([]),
+    [labelFont, setLabelFont] = useState<Font | null>(null),
     [plates, setPlates] = useState<any>(null),
     [error, setError] = useState(""),
     [hover, setHover] = useState(""),
@@ -73,7 +77,10 @@ export function Globe(p: Props) {
     key: "",
     plan: [],
   });
-  const labelSprites = useRef(new Map<string, HTMLCanvasElement>());
+  const labelElements = useRef(new Map<string, SVGPathElement>());
+  const labelLayer = useRef<SVGSVGElement>(null);
+  const markerLayer = useRef<HTMLCanvasElement>(null);
+  const labelStyle = useRef("");
   const invert = useRef<
     ((p: [number, number]) => [number, number] | null) | null
   >(null);
@@ -82,6 +89,11 @@ export function Globe(p: Props) {
   const pointers = useRef(new Map<number, [number, number]>());
   const drag = useRef({ x: 0, y: 0, moved: 0, pinch: 0, multi: false });
   useEffect(() => {
+    labelFontPromise ??= fetch(labelFontUrl).then(async (response) => {
+      if (!response.ok) throw new Error("Label font unavailable");
+      return parse(await response.arrayBuffer());
+    });
+    labelFontPromise.then(setLabelFont).catch(() => setError("Country labels unavailable."));
     earthPromise ??= fetch("/data/earth.json")
       .then((r) => r.json())
       .then((t) => ({
@@ -149,17 +161,19 @@ export function Globe(p: Props) {
   useLayoutEffect(() => {
     const canvas = ref.current;
     if (!canvas) return;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) {
+    const context = canvas.getContext("2d");
+    if (!context) {
       setError("Canvas unavailable. Use the event table below.");
       return;
     }
+    let ctx = context;
     const [w, h] = size,
-      dpr = Math.min(2, devicePixelRatio || 1);
+      dpr = devicePixelRatio || 1;
     const pixelWidth = Math.round(w * dpr),
       pixelHeight = Math.round(h * dpr);
     if (canvas.width !== pixelWidth) canvas.width = pixelWidth;
     if (canvas.height !== pixelHeight) canvas.height = pixelHeight;
+    canvas.style.width = w + "px";
     canvas.style.height = h + "px";
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.lineWidth = 1;
@@ -206,7 +220,7 @@ export function Globe(p: Props) {
           .translate([w / 2, h / 2])
           .clipAngle(90);
     invert.current = proj.invert ? (xy) => proj.invert!(xy) : null;
-    const path = geoPath(proj, ctx);
+    let path = geoPath(proj, ctx);
     ctx.beginPath();
     path({ type: "Sphere" });
     ctx.fillStyle = token("--globe-ocean");
@@ -290,65 +304,68 @@ export function Globe(p: Props) {
       ctx.stroke();
       ctx.setLineDash([]);
     }
-    if (p.countries) {
+    const layer = labelLayer.current!;
+    layer.style.width = w + "px";
+    layer.style.height = h + "px";
+    layer.style.display = p.countries ? "block" : "none";
+    if (labelStyle.current !== style) {
+      layer.replaceChildren();
+      labelElements.current.clear();
+      labelStyle.current = style;
+    }
+    if (p.countries && labelFont) {
       const key = [countries.length, w, h, p.camera.zoom, p.flat].join();
       if (labelPlan.current.key !== key) {
         labelPlan.current = {
           key,
           plan: planLabels(
             countries,
-            (name, size) => {
-              ctx.font = `${size}px sans-serif`;
-              return ctx.measureText(name).width;
-            },
+            (name, size) => labelFont.getAdvanceWidth(name, size),
             proj.scale(),
             p.camera.zoom,
           ),
         };
       }
-      ctx.save();
-      const imageSmoothing = ctx.imageSmoothingEnabled;
-      ctx.imageSmoothingEnabled = false;
-      for (const { label, size, halfWidth, opacity } of labelPlan.current.plan) {
+      for (const { label, size, opacity } of labelPlan.current.plan) {
         const alpha =
           opacity *
           countryLabelOpacity(label, [p.camera.lon, p.camera.lat], p.flat);
-        if (alpha <= 0) continue;
         const point = proj(label.coordinate);
-        if (!point) continue;
-        const spriteKey = [label.name, size, dpr, theme].join();
-        let bitmap = labelSprites.current.get(spriteKey);
-        if (!bitmap) {
-          bitmap = document.createElement("canvas");
-          bitmap.width = Math.ceil(halfWidth * 2 * dpr);
-          bitmap.height = Math.ceil((size + 12) * dpr);
-          const ink = bitmap.getContext("2d")!;
-          ink.scale(dpr, dpr);
-          ink.font = `${size}px sans-serif`;
-          ink.textAlign = "center";
-          ink.textBaseline = "middle";
-          ink.fillStyle = token("--ink-strong");
-          ink.strokeStyle = token("--globe-ocean");
-          ink.lineWidth = 3;
-          ink.lineJoin = "round";
-          ink.strokeText(label.name, bitmap.width / dpr / 2, bitmap.height / dpr / 2);
-          ink.fillText(label.name, bitmap.width / dpr / 2, bitmap.height / dpr / 2);
-          labelSprites.current.set(spriteKey, bitmap);
+        const labelKey = [label.name, size].join();
+        let text = labelElements.current.get(labelKey);
+        if (alpha <= 0 || !point) {
+          if (text) text.style.opacity = "0";
+          continue;
         }
-        const left = Math.round(point[0] * dpr - bitmap.width / 2) / dpr;
-        const top = Math.round(point[1] * dpr - bitmap.height / 2) / dpr;
-        ctx.globalAlpha = alpha;
-        ctx.drawImage(
-          bitmap,
-          left,
-          top,
-          bitmap.width / dpr,
-          bitmap.height / dpr,
-        );
+        if (!text) {
+          text = document.createElementNS("http://www.w3.org/2000/svg", "path");
+          text.dataset.country = label.name;
+          text.dataset.fontSize = String(size);
+          const outline = labelFont.getPath(label.name, 0, 0, size);
+          const bounds = outline.getBoundingBox();
+          text.setAttribute("d", labelFont.getPath(label.name, -(bounds.x1 + bounds.x2) / 2, -(bounds.y1 + bounds.y2) / 2, size).toPathData(4));
+          text.setAttribute("fill", token("--ink-strong"));
+          text.setAttribute("stroke", token("--globe-ocean"));
+          text.setAttribute("stroke-width", "3");
+          text.setAttribute("stroke-linejoin", "round");
+          text.setAttribute("paint-order", "stroke");
+          labelElements.current.set(labelKey, text);
+          layer.append(text);
+        }
+        text.setAttribute("transform", `translate(${point[0]}, ${point[1]})`);
+        text.style.opacity = String(alpha);
       }
-      ctx.imageSmoothingEnabled = imageSmoothing;
-      ctx.restore();
     }
+    const markers = markerLayer.current!;
+    if (markers.width !== pixelWidth) markers.width = pixelWidth;
+    if (markers.height !== pixelHeight) markers.height = pixelHeight;
+    markers.style.width = w + "px";
+    markers.style.height = h + "px";
+    ctx = markers.getContext("2d")!;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, w, h);
+    ctx.lineWidth = 1;
+    path = geoPath(proj, ctx);
     hits.current = [];
     const ordered = [
       ...p.events.filter((e) => e.id !== p.selected),
@@ -480,6 +497,7 @@ export function Globe(p: Props) {
     p.region,
     p.section,
     p.transect,
+    labelFont,
     size,
     theme,
     cursor,
@@ -668,6 +686,23 @@ export function Globe(p: Props) {
           }
         }}
         tabIndex={0}
+      />
+      <svg
+        ref={labelLayer}
+        class="country-label-layer"
+        aria-hidden="true"
+        style={{
+          position: "absolute",
+          left: 0,
+          top: 0,
+          overflow: "hidden",
+          pointerEvents: "none",
+        }}
+      />
+      <canvas
+        ref={markerLayer}
+        aria-hidden="true"
+        style={{ position: "absolute", left: 0, top: 0, pointerEvents: "none" }}
       />
       <p class="sr-only" aria-live="polite">
         {spoken}
