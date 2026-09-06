@@ -14,6 +14,7 @@ import { type Section } from "./data";
 import {
   countryLabels,
   countryLabelVisible,
+  snapToPixel,
   type CountryLabel,
 } from "./countryLabels";
 import {
@@ -379,7 +380,8 @@ export function Globe(p: Props) {
           continue;
         const point = proj(country.coordinate);
         if (!point) continue;
-        const [leftToRight, topToBottom] = point;
+        const leftToRight = snapToPixel(point[0], dpr),
+          topToBottom = snapToPixel(point[1], dpr);
         const halfWidth = ctx.measureText(country.name).width / 2 + 4;
         const box = {
           left: leftToRight - halfWidth,

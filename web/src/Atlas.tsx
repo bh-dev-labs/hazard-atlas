@@ -1427,6 +1427,7 @@ function Atlas() {
   const [route, setRoute] = useState(
     () => location.hash.slice(1) || "overview",
   );
+  const [stopped, setStopped] = useState("");
   useEffect(() => {
     const change = () => setRoute(location.hash.slice(1) || "overview");
     window.addEventListener("hashchange", change);
@@ -1550,6 +1551,11 @@ function Atlas() {
           </article>
         )}
       </main>
+      {stopped && (
+        <div class="atlas-message" role="status">
+          {stopped}
+        </div>
+      )}
       <footer class="atlas-footer">
         <a
           href="https://github.com/bruce-hoppe_uoft/hazard-atlas"
@@ -1562,6 +1568,27 @@ function Atlas() {
         <a href={fireSources[0].url}>NASA EONET</a>
         <a href={fireSources[1].url}>NASA FIRMS</a>
         <button onClick={() => go("sources")}>Map credits & references</button>
+        <button
+          class="quit"
+          onClick={async () => {
+            if (
+              !confirm(
+                "Stop the local Hazard Atlas server? This page will no longer load until you start the application again.",
+              )
+            )
+              return;
+            try {
+              await fetch("/api/quit", { method: "POST" });
+              setStopped(
+                "Hazard Atlas stopped. You can close this tab and reopen the application when needed.",
+              );
+            } catch {
+              setStopped("The local server is already stopped.");
+            }
+          }}
+        >
+          Stop the local server
+        </button>
       </footer>
     </div>
   );
