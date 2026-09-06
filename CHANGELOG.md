@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.3.0 (2026-09-06 UTC)
 
 - Optional country names on the globe and flat map, in both the earthquake view and the hazard atlas; labels drop the far side of the globe, skip event and detection markers, and travel in the shared view link.
 - Fixed unstable snapshot identity: history results with tied timestamps came out of an unordered map in a different order each run, so an unchanged query produced a different content-addressed dataset ID.
@@ -12,6 +12,9 @@
 - Event detail responses are cached for five minutes and invalidated when USGS revises the event, instead of being kept forever.
 - Table pagination clamps when results shrink, so a narrowed replay or filter no longer shows an empty page.
 - `npm run test:browser` builds the real binary, runs it on an ephemeral port against a temporary database, and drives these paths end to end.
+## 0.2.0 (2026-09-06 UTC)
+
+- Multi-hazard atlas: NASA EONET curated incidents and FIRMS thermal detections beside USGS earthquakes, with proximity association and immutable snapshots.
 - Attribution links to the repository instead of publishing an email address, and states that the project is independent of the University of Toronto and the USGS.
 - The release string is single-sourced from `package.json` and reaches Go through `-ldflags`; an unflagged build reports `dev`.
 - Colour moved to CSS custom properties with a dark theme, and depth now uses one sequential light-to-dark ramp instead of three unrelated hues.
