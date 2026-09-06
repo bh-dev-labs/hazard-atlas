@@ -1,3 +1,7 @@
+# 0.3.2 — local release
+
+Incident and detection markers no longer shimmer while the globe rotates. Country names are no longer suppressed by the markers on top of them: a label still never covers another label, but takes the least-covered anchor when no clear one exists, so the United States and Canada keep their names over a busy fire season.
+
 # 0.3.1 — local release
 
 Two corrections to 0.3.0. Country names no longer shimmer while the globe rotates: label text snaps to whole device pixels and holds still until it has earned a full pixel of movement. The footer regains the **Stop the local server** control that the quick start describes; the endpoint had survived the fork but nothing rendered the button.
