@@ -170,7 +170,12 @@ report.checks.push(
   "Earthquake route selection, globe/map, replay and 618-event export (lesson regression is covered by the inherited browser harness)",
 );
 await page.screenshot({ path: "docs/screenshots/hazard-earthquakes.png" });
-for (const route of ["Earthquakes", "Wildfires", "Sources & References"]) {
+for (const route of [
+  "Earthquakes",
+  "Wildfires",
+  "Hazards",
+  "Sources & References",
+]) {
   await page
     .getByRole("navigation", { name: "Main", exact: true })
     .getByRole("button", { name: route, exact: true })

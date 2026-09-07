@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.4.0 (2026-09-07 UTC)
+
+- New **Hazards** tab covering every NASA EONET category except wildfires and earthquakes, which keep their existing pipelines: EONET's own earthquakes category is discarded server-side so USGS stays the sole source of record.
+- Category is encoded by glyph shape and severity by colour, and the two are independent — filtering one never changes which shapes appear. A glyph legend documents all thirteen categories and the four severity states.
+- GDACS severity is joined onto EONET events by the event id each record already carries in its own GDACS source URL, so a matched event renders as one marker rather than two. An unmatched event stays "no assessment" and is never defaulted to green; absence of an assessment is not an assessment of low severity.
+- EONET and GDACS are fetched concurrently with a 15-second cap on the severity overlay alone. GDACS routinely takes 7–25 seconds and sometimes exceeds the client timeout, so a slow overlay now degrades to a partial result with an explanation instead of delaying the events. Cold retrieval dropped from over 25 seconds to about 4.
+- Category, severity and timeline filtering all run against the already-fetched snapshot, with no refetch. Multi-point events (a cyclone track) animate along the scrubber, drawing the passed points as a faded trail.
+- Overlapping markers bucket to a grid instead of stacking invisibly; a bucket of more than one draws as a count badge in its worst contained severity, and clicking separates it into a ring.
+- Fixed a country-label regression from 0.3.4: the canvas began taking an inline width that overrides the stylesheet, so a pane that had been hidden stayed collapsed to zero width until the resize observer caught up.
+- Fixed `scripts/hazard-browser-check.mjs`, which had been failing since 0.3.4 because the added marker canvas made its `canvas` selector ambiguous.
+
 ## 0.3.5 (2026-09-06 UTC)
 
 - Restored device-pixel snapping for wildfire incident and detection markers, which a prior stability refactor had accidentally dropped: their straight-edged triangle/square icons were drifting subpixel and shimmering under rotation, and jittering across the detection-cluster grid in a way that looked like inconsistent rotation.

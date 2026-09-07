@@ -1,3 +1,13 @@
+# 0.4.0 — local release
+
+Adds a Hazards tab covering every NASA EONET category except wildfires and earthquakes, which keep the pipelines they already had — EONET's own earthquakes category is dropped so USGS remains the source of record. Each category has its own outline glyph and each event a severity colour drawn from GDACS, and the two encodings stay independent: filtering by severity never changes which shapes appear. A legend in the panel documents all thirteen glyphs and the four severity states.
+
+GDACS severity is attached to an EONET event through the event id EONET already publishes in its own GDACS source link, so a shared event draws one marker rather than two. Events GDACS has not assessed read as "no assessment" rather than green, since no assessment is not the same as a low one. In practice EONET frequently cites other upstreams for its open events, so expect that state to be common.
+
+Category, severity and timeline filtering happen entirely in the browser against data already retrieved. Scrubbing the timeline animates multi-point events such as cyclone tracks, and markers that would land on top of one another group into a count badge that separates on click.
+
+Also corrects two defects introduced in 0.3.4: a pane that had been hidden could show a zero-width globe until its resize observer caught up, and the bundled browser regression check had been failing against the second marker canvas.
+
 # 0.3.5 — local release
 
 Wildfire incident and detection markers no longer shimmer or bounce while the globe rotates, and no longer flicker between clustered and individual as they cross a detection-cluster boundary. A stability refactor earlier in the 0.3.x series had accidentally dropped their device-pixel snapping; it's restored here at the same quarter-device-pixel grid used for country labels.

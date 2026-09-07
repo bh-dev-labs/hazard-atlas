@@ -1,5 +1,5 @@
 {
-  "generated": "2026-09-07T15:24:59.666Z",
+  "generated": "2026-09-07T15:46:15.528Z",
   "browser": "153.0.8010.12",
   "sizes": [
     {
@@ -56,6 +56,10 @@
     },
     {
       "route": "Wildfires",
+      "violations": []
+    },
+    {
+      "route": "Hazards",
       "violations": []
     },
     {
