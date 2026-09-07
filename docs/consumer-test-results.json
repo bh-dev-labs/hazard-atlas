@@ -1,7 +1,7 @@
 {
-  "archive": "HazardAtlas-0.4.0-darwin-arm64.zip",
-  "version": "0.4.0",
-  "root": "/private/tmp/atlas-consumer-oU3hFX",
+  "archive": "HazardAtlas-0.4.1-darwin-arm64.zip",
+  "version": "0.4.1",
+  "root": "/private/tmp/atlas-consumer-DVAWsm",
   "checks": [
     "Fresh ZIP extraction",
     "Native executable start",
@@ -16,5 +16,5 @@
   ],
   "windowsRuntimeTested": false,
   "intelMacRuntimeTested": false,
-  "generated": "2026-09-07T15:44:16.745Z"
+  "generated": "2026-09-07T18:42:16.192Z"
 }

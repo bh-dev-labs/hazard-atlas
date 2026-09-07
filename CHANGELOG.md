@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.4.1 (2026-09-07 UTC)
+
+- The footer credit is now the plain text “Built by Bruce Hoppe” rather than a link to the repository. The source code, licence and issue tracker remain linked from the About and Sources panels.
+
 ## 0.4.0 (2026-09-07 UTC)
 
 - New **Hazards** tab covering every NASA EONET category except wildfires and earthquakes, which keep their existing pipelines: EONET's own earthquakes category is discarded server-side so USGS stays the sole source of record.

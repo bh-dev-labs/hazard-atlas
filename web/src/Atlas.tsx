@@ -1618,13 +1618,7 @@ function Atlas() {
         </div>
       )}
       <footer class="atlas-footer">
-        <a
-          href="https://github.com/bruce-hoppe_uoft/hazard-atlas"
-          target="_blank"
-          rel="noreferrer"
-        >
-          Built by Bruce Hoppe · Source on GitHub
-        </a>
+        <span>Built by Bruce Hoppe</span>
         <a href={sources[0].url}>USGS</a>
         <a href={fireSources[0].url}>NASA EONET</a>
         <a href={fireSources[1].url}>NASA FIRMS</a>

@@ -1,3 +1,7 @@
+# 0.4.1 — local release
+
+The footer credit reads “Built by Bruce Hoppe” as plain text and no longer links to the repository. The source code, licence and issue tracker are still reachable from the About and Sources panels.
+
 # 0.4.0 — local release
 
 Adds a Hazards tab covering every NASA EONET category except wildfires and earthquakes, which keep the pipelines they already had — EONET's own earthquakes category is dropped so USGS remains the source of record. Each category has its own outline glyph and each event a severity colour drawn from GDACS, and the two encodings stay independent: filtering by severity never changes which shapes appear. A legend in the panel documents all thirteen glyphs and the four severity states.
