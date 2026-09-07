@@ -47,7 +47,6 @@ import {
   queryURL,
 } from "./data";
 import "./style.css";
-const repository = "https://github.com/bruce-hoppe_uoft/hazard-atlas";
 type SortKey = "mag" | "place" | "depth" | "time" | "status";
 const fmt = (v: number | null | undefined, digits = 1) =>
   v == null ? "Unavailable" : v.toFixed(digits);
@@ -1281,12 +1280,10 @@ export function EarthquakeApp({ active = true }: { active?: boolean }) {
                   Clicking source links opens the source website.
                 </p>
                 <p>
-                  Built by Bruce Hoppe. Source code, licence and issue tracker:{" "}
-                  <a href={repository} target="_blank" rel="noreferrer">
-                    {repository.replace("https://", "")}
-                  </a>
-                  . An independent educational project, not affiliated with or
-                  endorsed by the University of Toronto or the USGS.
+                  © 2026 Bruce Hoppe. Released under the MIT licence, included
+                  with this application. An independent educational project, not
+                  affiliated with or endorsed by the University of Toronto or
+                  the USGS.
                 </p>
                 {[
                   "Earthquake observations",

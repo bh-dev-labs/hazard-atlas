@@ -17,4 +17,4 @@ Data lives in the operating system's user configuration directory under `HazardA
 Windows: keep the console window open while using the app; Ctrl+C stops it. macOS: choose **Stop the local server** at the foot of the page when finished.
 
 
-Built by Bruce Hoppe · [github.com/bruce-hoppe_uoft/hazard-atlas](https://github.com/bruce-hoppe_uoft/hazard-atlas)
+© 2026 Bruce Hoppe

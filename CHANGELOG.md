@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.2 (2026-09-07 UTC)
+
+- The footer credit is now the copyright notice “© 2026 Bruce Hoppe”.
+- Removed every link to the project's own repository: from the footer, the earthquake About panel, the hazard Sources panel, the README and the quick start. Both panels now name the MIT licence, which ships with the application, in place of the former source-code link. Third-party credits that point at other projects, such as the tectonic plate dataset and the Tabler icon set, are unchanged, since those attributions are owed to their authors.
+- `LICENSE` uses the © character instead of the ASCII `(c)` substitute. Third-party notices are reproduced verbatim and were not touched.
+
 ## 0.4.1 (2026-09-07 UTC)
 
 - The footer credit is now the plain text “Built by Bruce Hoppe” rather than a link to the repository. The source code, licence and issue tracker remain linked from the About and Sources panels.

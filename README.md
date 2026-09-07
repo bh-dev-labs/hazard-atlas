@@ -93,5 +93,5 @@ Read [QUICKSTART](QUICKSTART.md), [baseline](docs/baseline.md), [migration plan]
 Licensed under the [MIT License](LICENSE). Third-party licenses are recorded in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). This is an educational observatory, not an earthquake prediction or emergency warning service.
 
 
-Built by Bruce Hoppe · [github.com/bruce-hoppe_uoft/hazard-atlas](https://github.com/bruce-hoppe_uoft/hazard-atlas)
+© 2026 Bruce Hoppe
 # hazard-atlas

@@ -83,7 +83,7 @@ await page
   .getByRole("button", { name: "Return to my exploration", exact: true })
   .click();
 if (
-  !(await page.getByText("Built by Bruce Hoppe", { exact: true }).isVisible())
+  !(await page.getByText("© 2026 Bruce Hoppe", { exact: true }).isVisible())
 )
   throw Error("Missing visible author credit");
 const axe = await new AxeBuilder({ page }).analyze();

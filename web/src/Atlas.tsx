@@ -1563,15 +1563,9 @@ function Atlas() {
               accounts or telemetry.
             </p>
             <p>
-              Built by Bruce Hoppe.{" "}
-              <a href="https://github.com/bruce-hoppe_uoft/hazard-atlas">
-                Hazard Atlas source code
-              </a>
-              . Based on{" "}
-              <a href="https://github.com/bruce-hoppe_uoft/earthquake-observatory">
-                Earthquake Observatory
-              </a>
-              . No NASA, USGS or University of Toronto endorsement.
+              © 2026 Bruce Hoppe. Released under the MIT licence, included with
+              this application. Based on Earthquake Observatory. No NASA, USGS
+              or University of Toronto endorsement.
             </p>
             {fireSources.map((s) => (
               <section>
@@ -1618,7 +1612,7 @@ function Atlas() {
         </div>
       )}
       <footer class="atlas-footer">
-        <span>Built by Bruce Hoppe</span>
+        <span>© 2026 Bruce Hoppe</span>
         <a href={sources[0].url}>USGS</a>
         <a href={fireSources[0].url}>NASA EONET</a>
         <a href={fireSources[1].url}>NASA FIRMS</a>
