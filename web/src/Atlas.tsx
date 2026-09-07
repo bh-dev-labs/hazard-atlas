@@ -2,6 +2,7 @@ import { render } from "preact";
 import { useEffect, useMemo, useRef, useState } from "preact/hooks";
 import { EarthquakeApp } from "./main";
 import { Globe, type Camera } from "./Globe";
+import { HazardExplorer } from "./HazardExplorer";
 import { Workspace } from "./Workspace";
 import { sources } from "./content";
 import { csvCell, download, type Dataset, type Event } from "./model";
@@ -1510,6 +1511,7 @@ function Atlas() {
             ["overview", "Overview"],
             ["earthquakes", "Earthquakes"],
             ["wildfires", "Wildfires"],
+            ["hazards", "Hazards"],
             ["learn", "Learn"],
             ["sources", "Sources & References"],
           ].map(([key, title]) => (
@@ -1536,6 +1538,9 @@ function Atlas() {
             learn={route === "learn"}
             onEarthquake={() => go("earthquakes")}
           />
+        </div>
+        <div class="module-view" hidden={route !== "hazards"}>
+          <HazardExplorer active={route === "hazards"} />
         </div>
         {route === "learn" && (
           <div class="learn-entry">

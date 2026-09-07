@@ -1,5 +1,6 @@
 import { geoArea } from "d3-geo";
 import { distance, within, type Region } from "./model";
+import { geometryAt as timelineGeometryAt } from "./timeline";
 export type FireGeometry = {
   type: "Point" | "Polygon";
   coordinates: number[] | number[][][];
@@ -66,11 +67,7 @@ export type RenderObject = {
   time: string;
 };
 export function geometryAt(incident: Incident, cursor: number): FireGeometry[] {
-  return incident.geometry.filter((g) =>
-    g.precision === "day"
-      ? Date.parse(g.date + "T23:59:59.999Z") <= cursor
-      : Date.parse(g.date) <= cursor,
-  );
+  return timelineGeometryAt(incident.geometry, cursor);
 }
 export function detectionsAt(ds: Detection[], cursor: number, hours: number) {
   return ds.filter((d) => {

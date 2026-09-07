@@ -70,11 +70,11 @@ await page.waitForTimeout(150);
 const separator = page
   .getByRole("separator", { name: "Resize details" })
   .filter({ visible: true });
-const before = await active().locator("canvas").boundingBox();
+const before = await active().locator('canvas[role="application"]').boundingBox();
 await separator.focus();
 await page.keyboard.press("ArrowLeft");
 await page.waitForTimeout(100);
-const after = await active().locator("canvas").boundingBox();
+const after = await active().locator('canvas[role="application"]').boundingBox();
 assert.ok(after.width < before.width);
 const handle = await separator.boundingBox();
 await page.mouse.move(handle.x + 3, handle.y + 30);
@@ -83,7 +83,7 @@ await page.mouse.move(handle.x - 40, handle.y + 30);
 await page.mouse.up();
 await page.waitForTimeout(100);
 const canvas = await active()
-  .locator("canvas")
+  .locator('canvas[role="application"]')
   .evaluate((c) => ({
     width: c.width,
     rect: c.getBoundingClientRect().width,
@@ -202,7 +202,7 @@ await page
   .waitFor();
 await page.screenshot({ path: "docs/screenshots/hazard-mobile-details.png" });
 await button("Globe").click();
-assert.ok(await active().locator("canvas").isVisible());
+assert.ok(await active().locator('canvas[role="application"]').isVisible());
 report.checks.push("390px Globe/List/Learn and selection sheet");
 await page.emulateMedia({ reducedMotion: "reduce" });
 await button("Auto-rotate: off")

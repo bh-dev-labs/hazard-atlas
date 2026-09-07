@@ -1,4 +1,6 @@
 import { type RenderObject } from "./wildfire";
+import { SEVERITY_RANK, type HazardMarker } from "./hazards";
+import { hazardIconPath } from "./hazardIcons";
 import { useEffect, useLayoutEffect, useRef, useState } from "preact/hooks";
 import {
   geoOrthographic,
@@ -34,6 +36,8 @@ type Props = {
   events: Event[];
   objects?: RenderObject[];
   onObject?: (o: RenderObject) => void;
+  hazards?: HazardMarker[];
+  onHazard?: (m: HazardMarker) => void;
   overview?: boolean;
   selected: string;
   onSelect: (e: Event) => void;
@@ -73,6 +77,17 @@ export function Globe(p: Props) {
     { o: RenderObject; members?: RenderObject[]; x: number; y: number }[]
   >([]);
   const polygons = useRef<RenderObject[]>([]);
+  const hazardHits = useRef<
+    {
+      title: string;
+      x: number;
+      y: number;
+      marker?: HazardMarker;
+      clusterKey?: string;
+      members?: HazardMarker[];
+    }[]
+  >([]);
+  const [spiderfied, setSpiderfied] = useState<string | null>(null);
   const labelPlan = useRef<{ key: string; plan: LabelPlan }>({
     key: "",
     plan: [],
@@ -158,6 +173,12 @@ export function Globe(p: Props) {
     frame = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(frame);
   }, [p.auto, p.speed, p.flat]);
+  // A spiderfied cluster is keyed by its screen-grid cell, so once the view
+  // moves that key refers to a different patch of screen and would expand
+  // whatever unrelated markers now land there. Collapse it on any view change.
+  useEffect(() => {
+    setSpiderfied(null);
+  }, [p.camera, p.flat, size]);
   useLayoutEffect(() => {
     const canvas = ref.current;
     if (!canvas) return;
@@ -169,6 +190,12 @@ export function Globe(p: Props) {
     let ctx = context;
     const [w, h] = size,
       dpr = devicePixelRatio || 1;
+    // A hidden pane (display:none) reports a zero-width content rect. The
+    // inline style below overrides the stylesheet's width:100%, so writing
+    // it while the size is still zero pins the canvas to 0px until the
+    // ResizeObserver catches up -- a visible collapse when a pane is shown
+    // again. Leave the last good size in place and skip the frame instead.
+    if (w <= 0) return;
     const pixelWidth = Math.round(w * dpr),
       pixelHeight = Math.round(h * dpr);
     if (canvas.width !== pixelWidth) canvas.width = pixelWidth;
@@ -493,12 +520,155 @@ export function Globe(p: Props) {
       }
       objectHits.current.push(cluster);
     }
+    hazardHits.current = [];
+    const hazardGlyph = (m: HazardMarker, x: number, y: number) => {
+      const bitmap = sprite(
+        `hazard:${m.category}:${m.alertLevel}`,
+        22,
+        22,
+        (context) => {
+          context.beginPath();
+          context.arc(0, 0, 10, 0, Math.PI * 2);
+          context.fillStyle = token(`--severity-${m.alertLevel}-plate`);
+          context.fill();
+          context.strokeStyle = token("--marker-edge");
+          context.lineWidth = 1;
+          context.stroke();
+          const scale = 13 / 24;
+          context.save();
+          context.translate(-12 * scale, -12 * scale);
+          context.scale(scale, scale);
+          context.strokeStyle = token(`--severity-${m.alertLevel}-stroke`);
+          context.lineWidth = 2 / scale;
+          context.lineCap = "round";
+          context.lineJoin = "round";
+          context.stroke(hazardIconPath(m.category));
+          context.restore();
+        },
+      );
+      drawSprite(bitmap, x, y);
+    };
+    // Bucket by a coarse pixel grid so exactly- or near-overlapping glyphs
+    // never silently stack invisibly on top of one another (the prompt's
+    // "most common failure mode" for this kind of map) — a bucket with more
+    // than one member draws as a single severity-colored count badge, click
+    // to spiderfy it into a small ring of its individual members.
+    const hazardBuckets = new Map<
+      string,
+      { x: number; y: number; members: HazardMarker[] }
+    >();
+    for (const m of p.hazards || []) {
+      if (m.geometry.type === "Polygon") {
+        ctx.beginPath();
+        path(m.geometry as any);
+        ctx.fillStyle = token(`--severity-${m.alertLevel}-plate`);
+        ctx.globalAlpha = 0.35;
+        ctx.fill();
+        ctx.globalAlpha = 1;
+        ctx.strokeStyle = token(`--severity-${m.alertLevel}-stroke`);
+        ctx.lineWidth = 2;
+        ctx.stroke();
+        continue;
+      }
+      const [lon, lat] = m.geometry.coordinates as number[];
+      if (!p.flat && !visible([lon, lat], [p.camera.lon, p.camera.lat]))
+        continue;
+      const xy = proj([lon, lat]);
+      if (!xy) continue;
+      const markerGrid = dpr * 4,
+        x = Math.round(xy[0] * markerGrid) / markerGrid,
+        y = Math.round(xy[1] * markerGrid) / markerGrid;
+      if (x < 0 || x > w || y < 0 || y > h) continue;
+      if (m.trail.length) {
+        // proj() mirrors far-side points onto the visible disc rather than
+        // returning null (clipAngle only applies to the path stream), so a
+        // track crossing the horizon needs the same visibility check the
+        // markers use, or it draws segments to bogus positions.
+        ctx.beginPath();
+        let drawn = false;
+        for (const entry of m.trail) {
+          const coordinate = entry.coordinates as [number, number];
+          if (!p.flat && !visible(coordinate, [p.camera.lon, p.camera.lat]))
+            continue;
+          const pt = proj(coordinate);
+          if (!pt) continue;
+          if (drawn) ctx.lineTo(pt[0], pt[1]);
+          else ctx.moveTo(pt[0], pt[1]);
+          drawn = true;
+        }
+        if (drawn) {
+          ctx.lineTo(x, y);
+          ctx.strokeStyle = token(`--severity-${m.alertLevel}-stroke`);
+          ctx.globalAlpha = 0.5;
+          ctx.lineWidth = 2;
+          ctx.stroke();
+          ctx.globalAlpha = 1;
+        }
+      }
+      const key = Math.floor(x / 18) + "," + Math.floor(y / 18);
+      const bucket = hazardBuckets.get(key);
+      if (bucket) bucket.members.push(m);
+      else hazardBuckets.set(key, { x, y, members: [m] });
+    }
+    for (const [key, bucket] of hazardBuckets) {
+      const { x, y, members } = bucket;
+      if (members.length === 1) {
+        hazardGlyph(members[0], x, y);
+        hazardHits.current.push({ title: members[0].title, x, y, marker: members[0] });
+        continue;
+      }
+      if (spiderfied === key) {
+        const radius = 16;
+        members.forEach((m, i) => {
+          const angle = (i / members.length) * Math.PI * 2 - Math.PI / 2;
+          const sx = x + Math.cos(angle) * radius,
+            sy = y + Math.sin(angle) * radius;
+          hazardGlyph(m, sx, sy);
+          hazardHits.current.push({ title: m.title, x: sx, y: sy, marker: m });
+        });
+        // The members themselves now sit off-center with no clusterKey (they
+        // pick their own record), so without this the center point has no
+        // hit target left to click back to regroup.
+        hazardHits.current.push({
+          title: "Tap to regroup",
+          x,
+          y,
+          clusterKey: key,
+        });
+        continue;
+      }
+      const worst = members.reduce((a, b) =>
+        SEVERITY_RANK[b.alertLevel] > SEVERITY_RANK[a.alertLevel] ? b : a,
+      ).alertLevel;
+      ctx.beginPath();
+      ctx.arc(x, y, 8, 0, Math.PI * 2);
+      ctx.fillStyle = token(`--severity-${worst}-plate`);
+      ctx.fill();
+      ctx.strokeStyle = token(`--severity-${worst}-stroke`);
+      ctx.lineWidth = 2;
+      ctx.stroke();
+      ctx.font = "bold 10px sans-serif";
+      ctx.fillStyle = token(`--severity-${worst}-stroke`);
+      ctx.textAlign = "center";
+      ctx.fillText(String(members.length), x, y + 3);
+      // The context is reused across frames and by the marker/cluster code
+      // above, which relies on the default alignment.
+      ctx.textAlign = "start";
+      hazardHits.current.push({
+        title: `${members.length} hazards, tap to separate`,
+        x,
+        y,
+        clusterKey: key,
+        members,
+      });
+    }
   }, [
     earth,
     countries,
     plates,
     p.events,
     p.objects,
+    p.hazards,
     p.overview,
     p.selected,
     p.camera,
@@ -512,6 +682,7 @@ export function Globe(p: Props) {
     size,
     theme,
     cursor,
+    spiderfied,
   ]);
   const local = (e: PointerEvent) => {
     const r = ref.current!.getBoundingClientRect();
@@ -644,13 +815,18 @@ export function Globe(p: Props) {
             const object = objectHits.current.find(
               (h) => Math.hypot(x - h.x, y - h.y) < 10,
             );
+            const hazard = hazardHits.current.find(
+              (h) => Math.hypot(x - h.x, y - h.y) < 10,
+            );
             const h = pick(x, y)[0];
             setHover(
               object
                 ? `${object.members?.length || 1} detection/location record(s) · ${object.o.title} · ${object.o.time}`
-                : h
-                  ? `M ${h.e.properties.mag ?? "—"} · ${h.e.properties.place} · ${h.e.geometry.coordinates[2] ?? "Unavailable"} km · ${new Date(h.e.properties.time).toISOString()}`
-                  : "",
+                : hazard
+                  ? hazard.title
+                  : h
+                    ? `M ${h.e.properties.mag ?? "—"} · ${h.e.properties.place} · ${h.e.geometry.coordinates[2] ?? "Unavailable"} km · ${new Date(h.e.properties.time).toISOString()}`
+                    : "",
             );
           }
         }}
@@ -658,6 +834,20 @@ export function Globe(p: Props) {
           const [x, y] = local(e);
           pointers.current.delete(e.pointerId);
           if (!drag.current.multi && drag.current.moved < 7) {
+            const hazardHit = hazardHits.current.find(
+              (h) => Math.hypot(x - h.x, y - h.y) < 10,
+            );
+            if (hazardHit?.clusterKey) {
+              setSpiderfied((k) =>
+                k === hazardHit.clusterKey ? null : hazardHit.clusterKey!,
+              );
+              return;
+            }
+            if (hazardHit?.marker) {
+              p.onHazard?.(hazardHit.marker);
+              return;
+            }
+            if (spiderfied) setSpiderfied(null);
             const h = pick(x, y);
             const objects = objectHits.current
               .filter((h) => Math.hypot(x - h.x, y - h.y) < 10)

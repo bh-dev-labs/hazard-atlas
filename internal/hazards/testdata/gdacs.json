@@ -1,0 +1,35 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {
+        "eventid": 1100001,
+        "eventtype": "TC",
+        "name": "Cyclone Demo Track",
+        "alertlevel": "Red",
+        "severitydata": { "severity": 95.0, "severitytext": "Wind speed 95 kts", "severityunit": "kts" }
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "eventid": 1100002,
+        "eventtype": "VO",
+        "name": "Demo Volcano Eruption",
+        "alertlevel": "Orange",
+        "severitydata": { "severity": 3.0, "severitytext": "VEI 3", "severityunit": "VEI" }
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "eventid": 1100004,
+        "eventtype": "DR",
+        "name": "Demo Drought",
+        "alertlevel": "Green",
+        "severitydata": { "severity": 1.0, "severitytext": "Localized impact", "severityunit": "" }
+      }
+    }
+  ]
+}

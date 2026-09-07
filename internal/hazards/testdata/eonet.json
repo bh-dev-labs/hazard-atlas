@@ -1,0 +1,84 @@
+{
+  "title": "EONET Events",
+  "events": [
+    {
+      "id": "EONET_00001",
+      "title": "Cyclone Demo Track",
+      "closed": null,
+      "categories": [{ "id": "severeStorms", "title": "Severe Storms" }],
+      "sources": [
+        { "id": "JTWC", "url": "https://www.metoc.navy.mil/jtwc/jtwc.html" },
+        { "id": "GDACS", "url": "https://www.gdacs.org/report.aspx?eventtype=TC&eventid=1100001" }
+      ],
+      "geometry": [
+        { "magnitudeValue": 65.0, "magnitudeUnit": "kts", "date": "2026-09-01T00:00:00Z", "type": "Point", "coordinates": [140.0, 12.0] },
+        { "magnitudeValue": 80.0, "magnitudeUnit": "kts", "date": "2026-09-02T00:00:00Z", "type": "Point", "coordinates": [138.5, 14.2] },
+        { "magnitudeValue": 95.0, "magnitudeUnit": "kts", "date": "2026-09-03T00:00:00Z", "type": "Point", "coordinates": [136.0, 17.0] },
+        { "magnitudeValue": 70.0, "magnitudeUnit": "kts", "date": "2026-09-04T00:00:00Z", "type": "Point", "coordinates": [133.0, 20.5] }
+      ]
+    },
+    {
+      "id": "EONET_00002",
+      "title": "Demo Volcano Eruption",
+      "closed": null,
+      "categories": [{ "id": "volcanoes", "title": "Volcanoes" }],
+      "sources": [
+        { "id": "SIVolcano", "url": "https://volcano.si.edu/volcano.cfm?vn=demo" },
+        { "id": "GDACS", "url": "https://www.gdacs.org/report.aspx?eventtype=VO&eventid=1100002" }
+      ],
+      "geometry": [
+        { "magnitudeValue": null, "magnitudeUnit": null, "date": "2026-09-02T00:00:00Z", "type": "Point", "coordinates": [-155.28, 19.42] }
+      ]
+    },
+    {
+      "id": "EONET_00003",
+      "title": "Demo Flood, No Severity Assessment",
+      "closed": null,
+      "categories": [{ "id": "floods", "title": "Floods" }],
+      "sources": [
+        { "id": "PDC", "url": "https://www.pdc.org/demo" }
+      ],
+      "geometry": [
+        { "magnitudeValue": null, "magnitudeUnit": null, "date": "2026-09-03T00:00:00Z", "type": "Point", "coordinates": [90.4, 23.8] }
+      ]
+    },
+    {
+      "id": "EONET_00004",
+      "title": "Demo Drought, Closed",
+      "closed": "2026-09-04T00:00:00Z",
+      "categories": [{ "id": "drought", "title": "Drought" }],
+      "sources": [
+        { "id": "GDACS", "url": "https://www.gdacs.org/report.aspx?eventtype=DR&eventid=1100004" }
+      ],
+      "geometry": [
+        { "magnitudeValue": null, "magnitudeUnit": null, "date": "2026-08-01", "type": "Point", "coordinates": [15.0, 48.0] },
+        { "magnitudeValue": null, "magnitudeUnit": null, "date": "2026-09-04", "type": "Point", "coordinates": [15.0, 48.0] }
+      ]
+    },
+    {
+      "id": "EONET_00005",
+      "title": "Demo Landslide",
+      "closed": null,
+      "categories": [{ "id": "landslides", "title": "Landslides" }],
+      "sources": [
+        { "id": "GDACS", "url": "https://www.gdacs.org/report.aspx?eventtype=EQ&eventid=1100005" }
+      ],
+      "geometry": [
+        { "magnitudeValue": null, "magnitudeUnit": null, "date": "2026-09-05", "type": "Point", "coordinates": [90.41, 23.81] }
+      ]
+    },
+    {
+      "id": "EONET_00006",
+      "title": "Demo Iceberg",
+      "closed": null,
+      "categories": [{ "id": "seaLakeIce", "title": "Sea and Lake Ice" }],
+      "sources": [
+        { "id": "NATICE", "url": "https://usicecenter.gov/pub/Iceberg_Tabular.csv" }
+      ],
+      "geometry": [
+        { "magnitudeValue": 900.0, "magnitudeUnit": "NM^2", "date": "2026-09-01", "type": "Point", "coordinates": [-45.0, -68.0] },
+        { "magnitudeValue": 900.0, "magnitudeUnit": "NM^2", "date": "2026-09-05", "type": "Point", "coordinates": [-42.5, -66.5] }
+      ]
+    }
+  ]
+}

@@ -9,7 +9,8 @@
     "check": "tsc --noEmit",
     "format": "prettier --write web/src scripts/*.mjs",
     "format:check": "prettier --check web/src scripts/*.mjs",
-    "test:browser": "npm run build && node scripts/app-check.mjs"
+    "test:browser": "npm run build && node scripts/app-check.mjs",
+    "test:hazards": "npm run build && node scripts/hazards-check.mjs"
   },
   "dependencies": {
     "@fontsource/noto-sans": "5.3.0",

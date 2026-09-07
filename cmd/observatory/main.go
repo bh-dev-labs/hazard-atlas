@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"earthquake-observatory/internal/hazards"
 	"earthquake-observatory/internal/observatory"
 	"earthquake-observatory/internal/wildfire"
 	"embed"
@@ -78,6 +79,11 @@ func main() {
 		panic(err)
 	}
 	mux.HandleFunc("GET /api/wildfires/{provider}", fires.Handler)
+	otherHazards, err := hazards.New(store.DB)
+	if err != nil {
+		panic(err)
+	}
+	mux.HandleFunc("GET /api/hazards", otherHazards.Handler)
 	reply := func(w http.ResponseWriter, v any, err error) {
 		w.Header().Set("Content-Type", "application/json")
 		w.Header().Set("Cache-Control", "no-store")

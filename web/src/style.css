@@ -46,6 +46,18 @@
   --depth-deep: #4a1d6a;
   --depth-unknown: #8b969c;
 
+  /* Hazard severity: four independent states (never implies category, which
+     is encoded by glyph shape). A filled plate behind the glyph in the
+     lighter tone, glyph stroked in the darker tone of the same family. */
+  --severity-red-plate: #fcebeb;
+  --severity-red-stroke: #a32d2d;
+  --severity-orange-plate: #faeeda;
+  --severity-orange-stroke: #854f0b;
+  --severity-green-plate: #eaf3de;
+  --severity-green-stroke: #3b6d11;
+  --severity-unknown-plate: #eceff0;
+  --severity-unknown-stroke: #6b7780;
+
   /* Geography drawn on the canvas */
   --globe-ocean: #e3eef0;
   --globe-land: #91adb0;
@@ -82,6 +94,14 @@
     --depth-mid: #d8608c;
     --depth-deep: #9a63c4;
     --depth-unknown: #7d8b91;
+    --severity-red-plate: #3a1f1f;
+    --severity-red-stroke: #e0796f;
+    --severity-orange-plate: #3a2f18;
+    --severity-orange-stroke: #e0b15c;
+    --severity-green-plate: #1f2f18;
+    --severity-green-stroke: #8fc46a;
+    --severity-unknown-plate: #2a3338;
+    --severity-unknown-stroke: #9db0b7;
     --globe-ocean: #1b2b33;
     --globe-land: #3c5b63;
     --globe-edge: #2f4750;
@@ -117,6 +137,14 @@
   --depth-mid: #d8608c;
   --depth-deep: #9a63c4;
   --depth-unknown: #7d8b91;
+  --severity-red-plate: #3a1f1f;
+  --severity-red-stroke: #e0796f;
+  --severity-orange-plate: #3a2f18;
+  --severity-orange-stroke: #e0b15c;
+  --severity-green-plate: #1f2f18;
+  --severity-green-stroke: #8fc46a;
+  --severity-unknown-plate: #2a3338;
+  --severity-unknown-stroke: #9db0b7;
   --globe-ocean: #1b2b33;
   --globe-land: #3c5b63;
   --globe-edge: #2f4750;
