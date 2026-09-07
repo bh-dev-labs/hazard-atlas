@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.5 (2026-09-06 UTC)
+
+- Restored device-pixel snapping for wildfire incident and detection markers, which a prior stability refactor had accidentally dropped: their straight-edged triangle/square icons were drifting subpixel and shimmering under rotation, and jittering across the detection-cluster grid in a way that looked like inconsistent rotation.
+- Markers snap to a quarter device pixel, matching the country-label fix: fine enough that the step between snap points is imperceptible, but coarse enough to damp the re-rasterization flicker.
+
 ## 0.3.4 (2026-09-06 UTC)
 
 - Country labels are drawn as vector glyph outlines (traced from the bundled font) instead of translated canvas sprites, positioned in a dedicated SVG layer between the geography and hazard-marker canvases.

@@ -1,3 +1,7 @@
+# 0.3.5 — local release
+
+Wildfire incident and detection markers no longer shimmer or bounce while the globe rotates, and no longer flicker between clustered and individual as they cross a detection-cluster boundary. A stability refactor earlier in the 0.3.x series had accidentally dropped their device-pixel snapping; it's restored here at the same quarter-device-pixel grid used for country labels.
+
 # 0.3.4 — local release
 
 Country names now render as vector glyph outlines instead of translated canvas sprites, in their own SVG layer, snapped to a quarter device pixel each frame. This removes the flicker that a live vector redraw introduced during rotation, without the visible pixel-step "bounce" a coarser snap causes. The white halo stroke around each label is gone — it was itself a source of shimmer, and the flat ocean background is contrasty enough without it.

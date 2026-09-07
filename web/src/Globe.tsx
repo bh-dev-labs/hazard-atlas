@@ -438,7 +438,14 @@ export function Globe(p: Props) {
         continue;
       const xy = proj([lon, lat]);
       if (!xy) continue;
-      const [x, y] = xy;
+      // Straight-edged incident/detection markers show subpixel drift as a
+      // shimmer under rotation, and jitter across the cluster grid below.
+      // Snap to a quarter device pixel: fine enough that the jump between
+      // steps is imperceptible (whole-pixel snapping shows a visible bounce),
+      // but coarse enough to damp the flicker, like the labels.
+      const markerGrid = dpr * 4,
+        x = Math.round(xy[0] * markerGrid) / markerGrid,
+        y = Math.round(xy[1] * markerGrid) / markerGrid;
       if (x < 0 || x > w || y < 0 || y > h) continue;
       if (o.kind === "detection" && (p.objects?.length || 0) > 2000) {
         const key = Math.floor(x / 18) + "," + Math.floor(y / 18);
