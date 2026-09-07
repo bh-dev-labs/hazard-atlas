@@ -332,28 +332,32 @@ export function Globe(p: Props) {
           countryLabelOpacity(label, [p.camera.lon, p.camera.lat], p.flat);
         const point = proj(label.coordinate);
         const labelKey = [label.name, size].join();
-        let text = labelElements.current.get(labelKey);
+        let glyph = labelElements.current.get(labelKey);
         if (alpha <= 0 || !point) {
-          if (text) text.style.opacity = "0";
+          if (glyph) glyph.style.opacity = "0";
           continue;
         }
-        if (!text) {
-          text = document.createElementNS("http://www.w3.org/2000/svg", "path");
-          text.dataset.country = label.name;
-          text.dataset.fontSize = String(size);
+        if (!glyph) {
           const outline = labelFont.getPath(label.name, 0, 0, size);
           const bounds = outline.getBoundingBox();
-          text.setAttribute("d", labelFont.getPath(label.name, -(bounds.x1 + bounds.x2) / 2, -(bounds.y1 + bounds.y2) / 2, size).toPathData(4));
-          text.setAttribute("fill", token("--ink-strong"));
-          text.setAttribute("stroke", token("--globe-ocean"));
-          text.setAttribute("stroke-width", "3");
-          text.setAttribute("stroke-linejoin", "round");
-          text.setAttribute("paint-order", "stroke");
-          labelElements.current.set(labelKey, text);
-          layer.append(text);
+          const d = labelFont.getPath(label.name, -(bounds.x1 + bounds.x2) / 2, -(bounds.y1 + bounds.y2) / 2, size).toPathData(4);
+          glyph = document.createElementNS("http://www.w3.org/2000/svg", "path");
+          glyph.dataset.country = label.name;
+          glyph.dataset.fontSize = String(size);
+          glyph.setAttribute("d", d);
+          glyph.setAttribute("fill", token("--ink-strong"));
+          labelElements.current.set(labelKey, glyph);
+          layer.append(glyph);
         }
-        text.setAttribute("transform", `translate(${point[0]}, ${point[1]})`);
-        text.style.opacity = String(alpha);
+        // Snap to a quarter device pixel: fine enough that the jump between
+        // steps is imperceptible, but coarse enough to damp the flicker from
+        // re-rasterizing anti-aliased glyph edges at an arbitrary subpixel
+        // phase every frame.
+        const grid = dpr * 4,
+          left = Math.round(point[0] * grid) / grid,
+          top = Math.round(point[1] * grid) / grid;
+        glyph.setAttribute("transform", `translate(${left}, ${top})`);
+        glyph.style.opacity = String(alpha);
       }
     }
     const markers = markerLayer.current!;

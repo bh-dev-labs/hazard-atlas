@@ -201,7 +201,12 @@ window.ready = true;
         for (const name of ["Canada", "marker"]) {
           const draw = result.draws.find(draw => draw.name === name);
           assert.ok(draw, `${name} remains visible`);
-          assert.ok(Math.hypot(draw.x - result.expected[0], draw.y - result.expected[1]) < 0.02, `${name} follows its exact anchor at DPR ${dpr}, frame ${frame}`);
+          // Canada is a device-pixel-snapped glyph outline (anti-shimmer), so its anchor
+          // can be off by up to half a device pixel; the marker draws at its exact anchor.
+          // Canada is snapped to a quarter device pixel (anti-shimmer), so its anchor
+          // can be off by up to an eighth of a device pixel; the marker draws exactly.
+          const tolerance = name === "Canada" ? (Math.SQRT2 * 0.125) / dpr + 0.02 : 0.02;
+          assert.ok(Math.hypot(draw.x - result.expected[0], draw.y - result.expected[1]) < tolerance, `${name} follows its exact anchor at DPR ${dpr}, frame ${frame}`);
         }
       }
     }

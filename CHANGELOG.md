@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.4 (2026-09-06 UTC)
+
+- Country labels are drawn as vector glyph outlines (traced from the bundled font) instead of translated canvas sprites, positioned in a dedicated SVG layer between the geography and hazard-marker canvases.
+- Label position is snapped to a quarter device pixel each frame, damping the flicker from re-rasterizing anti-aliased glyph edges at an arbitrary subpixel phase without introducing a visible positional step.
+- Removed the white halo/outline stroke around country names; a crisp stroke was itself a source of shimmer under rotation, and the flat ocean background gives the labels enough contrast without it.
+
 ## 0.3.3 (2026-09-06 UTC)
 
 - Country labels keep fixed geographic anchors instead of jumping between collision offsets.

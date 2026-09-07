@@ -1,3 +1,7 @@
+# 0.3.4 — local release
+
+Country names now render as vector glyph outlines instead of translated canvas sprites, in their own SVG layer, snapped to a quarter device pixel each frame. This removes the flicker that a live vector redraw introduced during rotation, without the visible pixel-step "bounce" a coarser snap causes. The white halo stroke around each label is gone — it was itself a source of shimmer, and the flat ocean background is contrasty enough without it.
+
 # 0.3.3 — local release
 
 Fixes the remaining country-label and fire-marker jumping under rotation. Country names retain fixed geographic anchors, and labels and point markers reuse cached images while moving at exact projected coordinates. The canvas no longer resets its backing storage on every frame. Markers render above country labels and remain selectable.
