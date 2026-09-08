@@ -1,3 +1,7 @@
+# Local rebuild — 2026-09-08
+
+Copyright © 2026 Bruce Hoppe remains in source comments and LICENSE. The footer, Sources and About panels no longer display the notice.
+
 # 0.4.2 — local release
 
 The footer carries the copyright notice “© 2026 Bruce Hoppe”, and the application no longer links to its own repository anywhere: not from the footer, the About panel, the Sources panel, the README or the quick start. Both panels now point to the MIT licence that ships with the application instead. Credits to other projects, such as the tectonic plate dataset and the Tabler icon set, are unchanged, because those attributions are owed to their authors.

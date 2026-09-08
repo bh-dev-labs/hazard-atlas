@@ -82,10 +82,8 @@ await page
 await page
   .getByRole("button", { name: "Return to my exploration", exact: true })
   .click();
-if (
-  !(await page.getByText("© 2026 Bruce Hoppe", { exact: true }).isVisible())
-)
-  throw Error("Missing visible author credit");
+if (await page.getByText(/Bruce Hoppe/).count())
+  throw Error("Author copyright should remain in code only");
 const axe = await new AxeBuilder({ page }).analyze();
 await fs.writeFile(
   "docs/accessibility-results.json",

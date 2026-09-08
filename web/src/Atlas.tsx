@@ -1,3 +1,4 @@
+/*! Copyright © 2026 Bruce Hoppe. MIT License. */
 import { render } from "preact";
 import { useEffect, useMemo, useRef, useState } from "preact/hooks";
 import { EarthquakeApp } from "./main";
@@ -1563,9 +1564,9 @@ function Atlas() {
               accounts or telemetry.
             </p>
             <p>
-              © 2026 Bruce Hoppe. Released under the MIT licence, included with
-              this application. Based on Earthquake Observatory. No NASA, USGS
-              or University of Toronto endorsement.
+              Released under the MIT licence, included with this application.
+              Based on Earthquake Observatory. No NASA, USGS or University of
+              Toronto endorsement.
             </p>
             {fireSources.map((s) => (
               <section>
@@ -1612,7 +1613,6 @@ function Atlas() {
         </div>
       )}
       <footer class="atlas-footer">
-        <span>© 2026 Bruce Hoppe</span>
         <a href={sources[0].url}>USGS</a>
         <a href={fireSources[0].url}>NASA EONET</a>
         <a href={fireSources[1].url}>NASA FIRMS</a>

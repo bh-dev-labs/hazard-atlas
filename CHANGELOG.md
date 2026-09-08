@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Retained Copyright © 2026 Bruce Hoppe in source comments and LICENSE; removed the visible notice from the footer, Sources and About panels.
+
 ## 0.4.2 (2026-09-07 UTC)
 
 - The footer credit is now the copyright notice “© 2026 Bruce Hoppe”.

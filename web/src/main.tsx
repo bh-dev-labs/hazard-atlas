@@ -1,3 +1,4 @@
+/*! Copyright © 2026 Bruce Hoppe. MIT License. */
 import { Workspace } from "./Workspace";
 import {
   useEffect,
@@ -1280,8 +1281,8 @@ export function EarthquakeApp({ active = true }: { active?: boolean }) {
                   Clicking source links opens the source website.
                 </p>
                 <p>
-                  © 2026 Bruce Hoppe. Released under the MIT licence, included
-                  with this application. An independent educational project, not
+                  Released under the MIT licence, included with this
+                  application. An independent educational project, not
                   affiliated with or endorsed by the University of Toronto or
                   the USGS.
                 </p>
