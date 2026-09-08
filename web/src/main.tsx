@@ -1283,8 +1283,7 @@ export function EarthquakeApp({ active = true }: { active?: boolean }) {
                 <p>
                   Released under the MIT licence, included with this
                   application. An independent educational project, not
-                  affiliated with or endorsed by the University of Toronto or
-                  the USGS.
+                  affiliated with or endorsed by the USGS.
                 </p>
                 {[
                   "Earthquake observations",

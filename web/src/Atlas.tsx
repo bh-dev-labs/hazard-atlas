@@ -1565,8 +1565,7 @@ function Atlas() {
             </p>
             <p>
               Released under the MIT licence, included with this application.
-              Based on Earthquake Observatory. No NASA, USGS or University of
-              Toronto endorsement.
+              Based on Earthquake Observatory. No NASA or USGS endorsement.
             </p>
             {fireSources.map((s) => (
               <section>

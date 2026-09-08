@@ -211,7 +211,7 @@ Require observed data to support the lesson's conclusion. Do not claim expert va
 
 An earlier request to display a personal email address as a “coded by” footer was withdrawn. **Do not restore that public email credit, add a mailto link, or invent replacement attribution.** Inspect the finished earthquake application's footer, About page, documentation, and relevant recent commits for the established replacement method, and preserve it.
 
-If those sources do not identify the agreed method, record the unresolved attribution wording and ask one focused question when necessary. Continue implementation and retain existing legitimate author/license notices. Do not substitute guessed institutional branding or imply endorsement by the University of Toronto, NASA, or USGS.
+If those sources do not identify the agreed method, record the unresolved attribution wording and ask one focused question when necessary. Continue implementation and retain existing legitimate author/license notices. Do not substitute guessed institutional branding or imply endorsement by NASA or USGS.
 
 Retain and extend footer references with links for USGS data, NASA EONET, NASA FIRMS, scientific explanations, map/globe credits, and a complete Sources & References page. Identify the actual providers and assets used, their licenses, dataset versions where available, and verification dates. Keep required on-map attribution visible. Link sources near scientific explanations as well as in the footer.
 

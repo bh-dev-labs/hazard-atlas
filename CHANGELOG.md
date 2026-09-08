@@ -67,7 +67,7 @@
 ## 0.2.0 (2026-09-06 UTC)
 
 - Multi-hazard atlas: NASA EONET curated incidents and FIRMS thermal detections beside USGS earthquakes, with proximity association and immutable snapshots.
-- Attribution links to the repository instead of publishing an email address, and states that the project is independent of the University of Toronto and the USGS.
+- Attribution links to the repository instead of publishing an email address, and states that the project is independent of the USGS.
 - The release string is single-sourced from `package.json` and reaches Go through `-ldflags`; an unflagged build reports `dev`.
 - Colour moved to CSS custom properties with a dark theme, and depth now uses one sequential light-to-dark ramp instead of three unrelated hues.
 - Event table sorts from its column headers with `aria-sort`, across five columns in both directions.
