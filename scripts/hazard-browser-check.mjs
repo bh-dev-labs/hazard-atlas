@@ -70,11 +70,15 @@ await page.waitForTimeout(150);
 const separator = page
   .getByRole("separator", { name: "Resize details" })
   .filter({ visible: true });
-const before = await active().locator('canvas[role="application"]').boundingBox();
+const before = await active()
+  .locator('canvas[role="application"]')
+  .boundingBox();
 await separator.focus();
 await page.keyboard.press("ArrowLeft");
 await page.waitForTimeout(100);
-const after = await active().locator('canvas[role="application"]').boundingBox();
+const after = await active()
+  .locator('canvas[role="application"]')
+  .boundingBox();
 assert.ok(after.width < before.width);
 const handle = await separator.boundingBox();
 await page.mouse.move(handle.x + 3, handle.y + 30);

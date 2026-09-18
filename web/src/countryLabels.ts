@@ -77,7 +77,7 @@ export function countryLabels(countries: FeatureCollection): CountryLabel[] {
           ? country.geometry.coordinates
               .map((coordinates) => ({ type: "Polygon" as const, coordinates }))
               .sort((first, second) => geoArea(second) - geoArea(first))[0]
-          : country.geometry as Polygon;
+          : (country.geometry as Polygon);
       const name = String(country.properties?.name || "");
       return {
         name: short[name] || name,

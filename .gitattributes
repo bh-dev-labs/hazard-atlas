@@ -1,0 +1,8 @@
+# Check out text files with LF on every OS so Prettier's endOfLine: "lf"
+# check passes on Windows runners (core.autocrlf would otherwise yield CRLF).
+* text=auto eol=lf
+
+# Feed fixtures keep their upstream CRLF line endings byte-for-byte.
+internal/wildfire/testdata/*.csv -text
+
+*.png binary

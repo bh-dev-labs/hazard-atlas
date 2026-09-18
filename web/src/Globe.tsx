@@ -108,7 +108,9 @@ export function Globe(p: Props) {
       if (!response.ok) throw new Error("Label font unavailable");
       return parse(await response.arrayBuffer());
     });
-    labelFontPromise.then(setLabelFont).catch(() => setError("Country labels unavailable."));
+    labelFontPromise
+      .then(setLabelFont)
+      .catch(() => setError("Country labels unavailable."));
     earthPromise ??= fetch("/data/earth.json")
       .then((r) => r.json())
       .then((t) => ({
@@ -367,8 +369,18 @@ export function Globe(p: Props) {
         if (!glyph) {
           const outline = labelFont.getPath(label.name, 0, 0, size);
           const bounds = outline.getBoundingBox();
-          const d = labelFont.getPath(label.name, -(bounds.x1 + bounds.x2) / 2, -(bounds.y1 + bounds.y2) / 2, size).toPathData(4);
-          glyph = document.createElementNS("http://www.w3.org/2000/svg", "path");
+          const d = labelFont
+            .getPath(
+              label.name,
+              -(bounds.x1 + bounds.x2) / 2,
+              -(bounds.y1 + bounds.y2) / 2,
+              size,
+            )
+            .toPathData(4);
+          glyph = document.createElementNS(
+            "http://www.w3.org/2000/svg",
+            "path",
+          );
           glyph.dataset.country = label.name;
           glyph.dataset.fontSize = String(size);
           glyph.setAttribute("d", d);
@@ -614,7 +626,12 @@ export function Globe(p: Props) {
       const { x, y, members } = bucket;
       if (members.length === 1) {
         hazardGlyph(members[0], x, y);
-        hazardHits.current.push({ title: members[0].title, x, y, marker: members[0] });
+        hazardHits.current.push({
+          title: members[0].title,
+          x,
+          y,
+          marker: members[0],
+        });
         continue;
       }
       if (spiderfied === key) {
