@@ -39,10 +39,10 @@ type lane struct {
 	last Snapshot
 }
 type Service struct {
-	db           *sql.DB
-	key          string
-	client       *http.Client
-	eonet, firms lane
+	db                        *sql.DB
+	key                       string
+	client                    *http.Client
+	eonet, firms, cwfisActive lane
 }
 
 func New(db *sql.DB, key string) (*Service, error) {
@@ -167,6 +167,11 @@ func (s *Service) Retrieve(ctx context.Context, provider string, q Query) (resul
 		query = "CWFIS Fire M3 daily hotspots; Canada bounding box; " + q.Start + " UTC"
 		gate = &s.firms
 		ttl = 3 * time.Hour
+	} else if provider == "cwfis-active" {
+		query = "CWFIS current agency-reported active wildland fires"
+		u = "https://geoserver.cwfif.nrcan.gc.ca/geoserver/ows?service=WFS&version=2.0.0&request=GetFeature&typeNames=public:cwfif_national_activefires&outputFormat=application%2Fjson&count=50000"
+		gate = &s.cwfisActive
+		ttl = 15 * time.Minute
 	} else {
 		return Snapshot{}, fmt.Errorf("unknown provider")
 	}
@@ -180,6 +185,8 @@ func (s *Service) Retrieve(ctx context.Context, provider string, q Query) (resul
 	d := Snapshot{Schema: 1, Provider: provider, Product: Product, Query: query, State: "failed", Incidents: []Incident{}, Detections: []Detection{}, Sources: []Source{}}
 	if provider == "cwfis" {
 		d.Product = "CWFIS Fire M3"
+	} else if provider == "cwfis-active" {
+		d.Product = "CWFIS Active Wildland Fires"
 	}
 	if provider == "firms" {
 		d.Coverage = &q
@@ -188,7 +195,7 @@ func (s *Service) Retrieve(ctx context.Context, provider string, q Query) (resul
 			d.Error = "Set HAZARD_ATLAS_FIRMS_MAP_KEY on the server, then restart. Frozen observations remain available."
 			return d, nil
 		}
-	} else {
+	} else if provider == "eonet" {
 		d.Product = "EONET v3"
 	}
 	if provider == "cwfis" {
@@ -267,12 +274,18 @@ func (s *Service) Retrieve(ctx context.Context, provider string, q Query) (resul
 		}
 		raw, _ = json.Marshal(chunks)
 		d.Sources = []Source{{"NASA FIRMS", "https://firms.modaps.eosdis.nasa.gov/api/area/"}}
-	} else {
+	} else if provider == "cwfis" {
 		raw, err = s.fetch(ctx, "https://cwfis.cfs.nrcan.gc.ca/downloads/hotspots/"+strings.ReplaceAll(q.Start, "-", "")+".csv")
 		if err == nil {
 			d.Detections, err = ParseCWFISHotspots(raw)
 		}
 		d.Sources = []Source{{"Natural Resources Canada CWFIS", "https://cwfis.cfs.nrcan.gc.ca/downloads/hotspots/"}}
+	} else {
+		raw, err = s.fetch(ctx, u)
+		if err == nil {
+			d.Incidents, err = ParseCWFISActiveFires(raw)
+		}
+		d.Sources = []Source{{"Natural Resources Canada CWFIS Active Wildland Fires", u}}
 	}
 	// A capped EONET page is still useful after every returned incident has
 	// passed validation. Preserve those records and their incomplete status.

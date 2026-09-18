@@ -33,14 +33,19 @@ type Source struct {
 	URL string `json:"url"`
 }
 type Incident struct {
-	ID          string     `json:"id"`
-	SourceID    string     `json:"sourceId"`
-	Title       string     `json:"title"`
-	Description *string    `json:"description"`
-	Closed      *string    `json:"closed"`
-	Status      string     `json:"status"`
-	Sources     []Source   `json:"sources"`
-	Geometry    []Geometry `json:"geometry"`
+	ID               string     `json:"id"`
+	SourceID         string     `json:"sourceId"`
+	Title            string     `json:"title"`
+	Description      *string    `json:"description"`
+	Closed           *string    `json:"closed"`
+	Status           string     `json:"status"`
+	Agency           string     `json:"agency,omitempty"`
+	AreaHectares     *float64   `json:"areaHectares,omitempty"`
+	PercentContained *float64   `json:"percentContained,omitempty"`
+	ControlStatus    string     `json:"controlStatus,omitempty"`
+	StatusDate       string     `json:"statusDate,omitempty"`
+	Sources          []Source   `json:"sources"`
+	Geometry         []Geometry `json:"geometry"`
 }
 type Detection struct {
 	ID          string   `json:"id"`
@@ -205,13 +210,95 @@ func ParseEONET(raw []byte) ([]Incident, error) {
 			}
 		}
 		sort.SliceStable(e.Geometry, func(i, j int) bool { return e.Geometry[i].Date < e.Geometry[j].Date })
-		out = append(out, Incident{"eonet:" + e.ID, e.ID, e.Title, e.Description, e.Closed, status, e.Sources, e.Geometry})
+		out = append(out, Incident{ID: "eonet:" + e.ID, SourceID: e.ID, Title: e.Title, Description: e.Description, Closed: e.Closed, Status: status, Sources: e.Sources, Geometry: e.Geometry})
 	}
 	if len(v.Events) == 1000 {
 		return out, errEONETCap
 	}
 	return out, nil
 }
+
+// ParseCWFISActiveFires reads the CWFIF GeoServer FeatureCollection for
+// agency-reported active fires. These are reported incident locations, not
+// satellite detections and not fire-perimeter geometry.
+func ParseCWFISActiveFires(raw []byte) ([]Incident, error) {
+	type feature struct {
+		ID         string `json:"id"`
+		Properties struct {
+			NationalFireID   string   `json:"national_fire_id"`
+			AgencyFireID     string   `json:"agency_fire_id"`
+			AgencyCode       string   `json:"agency_code"`
+			Latitude         float64  `json:"latitude"`
+			Longitude        float64  `json:"longitude"`
+			FireSize         *float64 `json:"fire_size"`
+			PercentContained *float64 `json:"percent_contained"`
+			ControlStatus    string   `json:"stage_of_control_status"`
+			StatusDate       string   `json:"status_date"`
+			ReportDate       string   `json:"situation_report_date"`
+		} `json:"properties"`
+	}
+	var v struct {
+		Features []feature `json:"features"`
+	}
+	if err := json.Unmarshal(raw, &v); err != nil || v.Features == nil {
+		return nil, fmt.Errorf("invalid CWFIS active-fire envelope")
+	}
+	if len(v.Features) > MaxRecords {
+		return nil, fmt.Errorf("CWFIS active-fire record cap reached; incomplete")
+	}
+	out := make([]Incident, 0, len(v.Features))
+	seen := map[string]int{}
+	const sourceURL = "https://geoserver.cwfif.nrcan.gc.ca/geoserver/ows?service=WFS&version=2.0.0&request=GetFeature&typeNames=public:cwfif_national_activefires&outputFormat=application/json"
+	for _, f := range v.Features {
+		p := f.Properties
+		key := p.NationalFireID
+		if key == "" {
+			key = p.AgencyFireID
+		}
+		if key == "" {
+			key = f.ID
+		}
+		if key == "" || !validPoint([]float64{p.Longitude, p.Latitude}) {
+			return nil, fmt.Errorf("invalid CWFIS active-fire record")
+		}
+		statusDate := p.StatusDate
+		if statusDate == "" {
+			statusDate = p.ReportDate
+		}
+		if _, err := time.Parse(time.RFC3339, statusDate); err != nil {
+			return nil, fmt.Errorf("invalid CWFIS active-fire status date")
+		}
+		title := key
+		if p.AgencyCode != "" {
+			title = p.AgencyCode + " · " + key
+		}
+		geometry, _ := json.Marshal([]float64{p.Longitude, p.Latitude})
+		incident := Incident{
+			ID: "cwfis-active:" + key, SourceID: key, Title: title,
+			Status: "open", Agency: p.AgencyCode, AreaHectares: nonNegative(p.FireSize),
+			PercentContained: nonNegative(p.PercentContained), ControlStatus: p.ControlStatus,
+			StatusDate: statusDate, Sources: []Source{{ID: "Natural Resources Canada CWFIS", URL: sourceURL}},
+			Geometry: []Geometry{{Type: "Point", Coordinates: geometry, Date: statusDate, Precision: "second"}},
+		}
+		if at, ok := seen[key]; ok {
+			if incident.StatusDate > out[at].StatusDate {
+				out[at] = incident
+			}
+		} else {
+			seen[key] = len(out)
+			out = append(out, incident)
+		}
+	}
+	return out, nil
+}
+
+func nonNegative(v *float64) *float64 {
+	if v == nil || *v < 0 || math.IsNaN(*v) || math.IsInf(*v, 0) {
+		return nil
+	}
+	return v
+}
+
 func ParseFIRMS(raw []byte) ([]Detection, error) {
 	r := csv.NewReader(bytes.NewReader(raw))
 	header, err := r.Read()

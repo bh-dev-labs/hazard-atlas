@@ -35,6 +35,24 @@ func TestFixtures(t *testing.T) {
 		t.Fatal("CWFIS product")
 	}
 }
+func TestCWFISActiveFireParsing(t *testing.T) {
+	raw := []byte(`{"type":"FeatureCollection","features":[{"id":"feature-1","properties":{"national_fire_id":"2026_NB_2026346","agency_fire_id":"2026346","agency_code":"NB","latitude":46.68,"longitude":-65.694,"fire_size":3,"percent_contained":25,"stage_of_control_status":"UC","status_date":"2026-09-18T08:53:00Z"}},{"id":"feature-2","properties":{"national_fire_id":"2026_NB_2026346","agency_fire_id":"2026346","agency_code":"NB","latitude":46.68,"longitude":-65.694,"fire_size":4,"percent_contained":50,"stage_of_control_status":"BH","status_date":"2026-09-18T09:53:00Z"}}]}`)
+	incidents, err := ParseCWFISActiveFires(raw)
+	if err != nil || len(incidents) != 1 {
+		t.Fatalf("active fire parse: %v", err)
+	}
+	got := incidents[0]
+	if got.ID != "cwfis-active:2026_NB_2026346" || got.Agency != "NB" || got.ControlStatus != "BH" || got.AreaHectares == nil || *got.AreaHectares != 4 || got.PercentContained == nil || *got.PercentContained != 50 {
+		t.Fatalf("active fire fields not preserved: %+v", got)
+	}
+	if got.Geometry[0].Type != "Point" || string(got.Geometry[0].Coordinates) != "[-65.694,46.68]" {
+		t.Fatalf("active fire coordinates: %+v", got.Geometry[0])
+	}
+	bad := []byte(`{"type":"FeatureCollection","features":[{"id":"bad","properties":{"national_fire_id":"bad","latitude":91,"longitude":0,"status_date":"2026-09-18T08:53:00Z"}}]}`)
+	if _, err = ParseCWFISActiveFires(bad); err == nil {
+		t.Fatal("invalid active fire accepted")
+	}
+}
 func TestFIRMSIdentityAndValidation(t *testing.T) {
 	b, _ := fixtures.ReadFile("testdata/firms.csv")
 	lines := strings.Split(strings.TrimSpace(string(b)), "\n")

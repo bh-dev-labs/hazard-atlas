@@ -1,6 +1,6 @@
 # Sources and verification
 
-Official provider documentation and data endpoints were checked 2026-09-06 UTC.
+Official provider documentation and data endpoints were checked 2026-09-18 UTC.
 
 | Provider or asset | Version 1 role | Boundary |
 |---|---|---|
@@ -13,6 +13,7 @@ Official provider documentation and data endpoints were checked 2026-09-06 UTC.
 | [NASA FIRMS US/Canada API](https://firms.modaps.eosdis.nasa.gov/usfs/api/) | Cross-border US/Canada satellite detections | Same MAP_KEY model; separate endpoint and product coverage from the global FIRMS service. |
 | [Natural Resources Canada CWFIS](https://cwfis.cfs.nrcan.gc.ca/) | Canada agency-reported fires and Fire M3 hotspots | Reported fires and satellite hotspots are separate products; CWFIS warns that maps are approximations and may not be current. |
 | [CWFIS data services catalogue](https://cwfis.cfs.nrcan.gc.ca/downloads/docs/en/references/cwfif/cwfis-data-placemat.pdf) | Canadian WMS/WFS/WCS layers | Includes active fires, reported fires, hotspots, perimeter estimates and National Fire Database products; services are migrating to CWFIF. |
+| [CWFIS Active Wildland Fires WFS](https://geoserver.cwfif.nrcan.gc.ca/geoserver/ows?service=WFS&version=2.0.0&request=GetFeature&typeNames=public:cwfif_national_activefires&outputFormat=application/json) | Agency-reported active fire incidents | Daily locations and provider fields from participating provincial, territorial and Parks Canada agencies; not complete national reporting and not satellite detection. |
 | [Copernicus EFFIS](https://forest-fire.emergency.copernicus.eu/applications/data-and-services) | Europe, Middle East and North Africa | Active fires, burnt areas, fire danger and severity are available through free web services with stated licensing. |
 | [Copernicus EMS Early Warning Data Store](https://ewds.climate.copernicus.eu/) | Historical and forecast global/EU forest-fire information | Registration or account access may be required for downloads; it is a data-store source, not silently treated as a live incident feed. |
 

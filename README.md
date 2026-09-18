@@ -60,15 +60,15 @@ node scripts/hazard-browser-check.mjs
 
 Overview fills the browser with a resizable workspace: layers and filters on the left, a globe in the centre, details and learning on the right, and a timeline/list below. Use **Globe focus** or **Reset layout** as needed. Resizing the panels resizes the Canvas renderer and its picking coordinates. On narrow screens use Globe, List, and Learn tabs.
 
-The overview keeps earthquake events, EONET incident records, and FIRMS thermal detections as separate layers and separate counts. Triangles identify curated wildfire incidents, squares identify satellite detections, and circles identify earthquakes. Marker size and colour are not a cross-hazard severity scale.
+The overview keeps earthquake events, EONET and CWFIS reported-fire incidents, and FIRMS/CWFIS thermal detections as separate layers and separate counts. Triangles identify reported or curated wildfire incidents, squares identify satellite detections, and circles identify earthquakes. Marker size and colour are not a cross-hazard severity scale.
 
-The **Wildfires** module starts with frozen, attributed data so it is useful without credentials. **Refresh EONET** retrieves current curated wildfire records. **Frozen Canada hotspots** adds Natural Resources Canada CWFIS Fire M3 satellite observations; the live CWFIS daily feed is also available without a key. FIRMS queries require explicit bounds no larger than 30° by 30° and one to five UTC days; a date-line query is split into two bounded requests. Configure the key only on the server:
+The **Wildfires** module starts with frozen, attributed data so it is useful without credentials. **Refresh EONET** retrieves current curated wildfire records. **Refresh Canadian reported fires** retrieves Natural Resources Canada CWFIS agency-reported active fires. **Frozen Canada hotspots** adds CWFIS Fire M3 satellite observations; the live CWFIS daily feed is also available without a key. FIRMS queries require explicit bounds no larger than 30° by 30° and one to five UTC days; a date-line query is split into two bounded requests. Configure the key only on the server:
 
 ```sh
 HAZARD_ATLAS_FIRMS_MAP_KEY=your-map-key go run ./cmd/observatory
 ```
 
-EONET open/closed is retained as a provider status, not burning or containment. FIRMS detections are thermal observations, not ignition points, fire perimeters, burned area, or incident membership. Nearby detections are labelled spatial/temporal proximity only.
+EONET open/closed is retained as a provider status, not burning or containment. CWFIS reported-fire control status, size and containment are agency-provided fields with incomplete national reporting coverage; they are not inferred by Hazard Atlas. FIRMS and CWFIS Fire M3 records are thermal observations, not ignition points, fire perimeters, burned area, or incident membership. Nearby detections are labelled spatial/temporal proximity only.
 
 Sources & References also records CWFIS GeoServer services, NASA FIRMS US/Canada, Copernicus EFFIS and the Copernicus Early Warning Data Store. These sources have different geographic coverage, update schedules, access requirements and scientific meanings; the application keeps their records separate.
 

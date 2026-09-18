@@ -14,6 +14,11 @@ export type Incident = {
   description: string | null;
   closed: string | null;
   status: "open" | "closed";
+  agency?: string;
+  areaHectares?: number;
+  percentContained?: number;
+  controlStatus?: string;
+  statusDate?: string;
   sources: { id: string; url: string }[];
   geometry: FireGeometry[];
 };
@@ -39,7 +44,7 @@ export type FireQuery = Omit<Region, "name"> & { start: string; days: number };
 export type FireSnapshot = {
   id: string;
   schema: number;
-  provider: "eonet" | "firms";
+  provider: "eonet" | "firms" | "cwfis" | "cwfis-active";
   product: string;
   query: string;
   fetched: string;
@@ -176,6 +181,11 @@ export const fireSources = [
     title: "Natural Resources Canada CWFIS",
     url: "https://cwfis.cfs.nrcan.gc.ca/",
     body: "Canada-wide reported fires, Fire M3 satellite hotspots, perimeter estimates, fire-weather layers and downloadable services.",
+  },
+  {
+    title: "CWFIS Active Wildland Fires",
+    url: "https://geoserver.cwfif.nrcan.gc.ca/geoserver/ows?service=WFS&version=2.0.0&request=GetFeature&typeNames=public:cwfif_national_activefires&outputFormat=application/json",
+    body: "Agency-reported active fire locations from provinces, territories and Parks Canada. Status, size and containment are provider fields; coverage is not complete national incident reporting.",
   },
   {
     title: "CWFIS GeoServer data services",

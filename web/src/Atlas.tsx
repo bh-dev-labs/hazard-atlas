@@ -53,6 +53,7 @@ function FireExplorer(p: {
   onEarthquake: () => void;
 }) {
   const [inc, setInc] = useState<FireSnapshot | null>(null),
+    [reported, setReported] = useState<FireSnapshot | null>(null),
     [det, setDet] = useState<FireSnapshot | null>(null),
     [canada, setCanada] = useState<FireSnapshot | null>(null),
     [eq, setEq] = useState<Dataset | null>(null);
@@ -102,7 +103,7 @@ function FireExplorer(p: {
       window.dispatchEvent(new window.Event("hazard-atlas-selection"));
   }, [p.active, p.learn]);
   async function load(
-    provider: "eonet" | "firms" | "cwfis",
+    provider: "eonet" | "firms" | "cwfis" | "cwfis-active",
     demo: boolean,
     q = query,
   ) {
@@ -115,17 +116,20 @@ function FireExplorer(p: {
         ? "/api/wildfires/" + provider + "?demo=true"
         : provider === "eonet"
           ? "/api/wildfires/eonet?start=" + fireStart + "&end=" + fireEnd
-          : "/api/wildfires/" +
-            provider +
-            "?query=" +
-            encodeURIComponent(
-              JSON.stringify({ ...q, start: fireStart, end: fireEnd }),
-            );
+          : provider === "cwfis-active"
+            ? "/api/wildfires/cwfis-active"
+            : "/api/wildfires/" +
+              provider +
+              "?query=" +
+              encodeURIComponent(
+                JSON.stringify({ ...q, start: fireStart, end: fireEnd }),
+              );
       const r = await fetch(url);
       const d = await r.json();
       if (!r.ok) throw Error(d.error || "Provider retrieval failed");
       if (ticket !== request.current) return;
       if (provider === "eonet") setInc(d);
+      else if (provider === "cwfis-active") setReported(d);
       else if (provider === "cwfis") setCanada(d);
       else setDet(d);
       if (demo) {
@@ -149,7 +153,7 @@ function FireExplorer(p: {
           setFireStart("2026-09-01");
           setFireEnd("2026-09-05");
         }
-        const [a, b, c, ca] = await Promise.all([
+        const [a, b, c, ca, ra] = await Promise.all([
           fetch(
             "/api/wildfires/eonet" +
               (cfg.demo ? "?demo=true" : `?start=${recentStart}&end=${today}`),
@@ -173,16 +177,45 @@ function FireExplorer(p: {
                     JSON.stringify({ start: today, days: 1 }),
                   )),
           ),
+          cfg.demo
+            ? Promise.resolve({
+                ok: true,
+                json: async () => ({
+                  schema: 1,
+                  provider: "cwfis-active",
+                  product: "CWFIS Active Wildland Fires",
+                  query: "Live provider disabled in offline demo mode",
+                  fetched: "",
+                  state: "unconfigured",
+                  complete: false,
+                  demo: true,
+                  incidents: [],
+                  detections: [],
+                  sources: [],
+                }),
+              })
+            : fetch("/api/wildfires/cwfis-active"),
         ]);
-        const [i, d, e, canda] = await Promise.all([
+        const [i, d, e, canda, reportedFires] = await Promise.all([
           a.json(),
           b.json(),
           c.json(),
           ca.json(),
+          ra.json(),
         ]);
         if (active) {
           setInc(
             a.ok ? i : { ...i, state: "failed", incidents: [], detections: [] },
+          );
+          setReported(
+            ra.ok
+              ? reportedFires
+              : {
+                  ...reportedFires,
+                  state: "failed",
+                  incidents: [],
+                  detections: [],
+                },
           );
           setDet(
             b.ok ? d : { ...d, state: "failed", incidents: [], detections: [] },
@@ -201,6 +234,10 @@ function FireExplorer(p: {
       active = false;
     };
   }, []);
+  const allInc = useMemo(
+    () => [...(inc?.incidents || []), ...(reported?.incidents || [])],
+    [inc, reported],
+  );
   const allDet = useMemo(
     () => [...(det?.detections || []), ...(canada?.detections || [])],
     [det, canada],
@@ -229,7 +266,7 @@ function FireExplorer(p: {
   }, [playing, lo, hi]);
   const incidents = useMemo(
     () =>
-      (inc?.incidents || []).filter(
+      allInc.filter(
         (i) =>
           i.title.toLowerCase().includes(text.toLowerCase()) &&
           geometryAt(i, cursor).some((g) => {
@@ -243,7 +280,7 @@ function FireExplorer(p: {
           }) &&
           geometryAt(i, cursor).length > 0,
       ),
-    [inc, text, cursor, fireStart, fireEnd],
+    [allInc, text, cursor, fireStart, fireEnd],
   );
   const detections = useMemo(() => {
     let ds = filterDetections(allDet, cursor, hours, null, confidence).filter(
@@ -307,7 +344,7 @@ function FireExplorer(p: {
   }
   const onObject = (o: RenderObject) => {
     if (o.kind === "incident") {
-      const i = inc?.incidents.find((i) => i.id === o.id.split("@")[0]);
+      const i = allInc.find((i) => i.id === o.id.split("@")[0]);
       if (i) choose({ kind: "incident", value: i });
     } else {
       const d = allDet.find((d) => d.id === o.id);
@@ -325,7 +362,7 @@ function FireExplorer(p: {
   };
   const currentSelected =
     selected?.kind === "incident"
-      ? inc?.incidents.find((i) => i.id === selected.value.id)
+      ? allInc.find((i) => i.id === selected.value.id)
       : selected?.kind === "detection"
         ? allDet.find((d) => d.id === selected.value.id)
         : selected?.value;
@@ -499,6 +536,7 @@ function FireExplorer(p: {
       pause();
       setInc(payload.incidents);
       setDet(payload.detections);
+      setReported(null);
       setCanada(null);
       setEq(payload.earthquakes);
       setCursor(payload.view.cursor ?? Infinity);
@@ -560,7 +598,14 @@ function FireExplorer(p: {
       schema: 1,
       appVersion: "0.2.0",
       snapshotSHA256: hash,
-      sourceSnapshot: kind === "incidents" ? inc : det,
+      sourceSnapshot:
+        kind === "incidents"
+          ? inc
+            ? { ...inc, incidents: allInc }
+            : reported
+              ? { ...reported, incidents: allInc }
+              : null
+          : det,
       filters: {
         cursor: Number.isFinite(cursor) ? cursor : null,
         hours,
@@ -763,6 +808,12 @@ function FireExplorer(p: {
         >
           Frozen Canada hotspots
         </button>
+        <button
+          disabled={!!busy || lesson >= 0}
+          onClick={() => load("cwfis-active", false)}
+        >
+          Refresh Canadian reported fires
+        </button>
       </div>
       <form
         onSubmit={(e) => {
@@ -844,6 +895,7 @@ function FireExplorer(p: {
       </label>
       <p class="muted">Confidence is a detector quality category.</p>
       {status(inc, "EONET")}
+      {status(reported, "CWFIS reported fires")}
       {status(det, "FIRMS")}
       {status(canada, "CWFIS Canada")}
       {p.overview && (
@@ -869,20 +921,24 @@ function FireExplorer(p: {
           {flat ? "3D globe" : "2D map"}
         </button>
       </div>
-      {inc && det && canada && incidents.length + detections.length === 0 && (
-        <div class="notice" role="status">
-          No wildfire records match the current dates and filters. Check source
-          status in the left panel, change the dates, or load the frozen
-          observations.
-          <div>
-            EONET: {inc.state} · FIRMS: {det.state} · Canada hotspots:{" "}
-            {canada.state}
+      {inc &&
+        reported &&
+        det &&
+        canada &&
+        incidents.length + detections.length === 0 && (
+          <div class="notice" role="status">
+            No wildfire records match the current dates and filters. Check
+            source status in the left panel, change the dates, or load the
+            frozen observations.
+            <div>
+              EONET: {inc.state} · CWFIS reported: {reported.state} · FIRMS:{" "}
+              {det.state} · Canada hotspots: {canada.state}
+            </div>
+            <button disabled={!!busy} onClick={() => load("eonet", true)}>
+              Load frozen incidents
+            </button>
           </div>
-          <button disabled={!!busy} onClick={() => load("eonet", true)}>
-            Load frozen incidents
-          </button>
-        </div>
-      )}
+        )}
       <Globe
         events={earthquakes}
         objects={objects}
@@ -1009,10 +1065,18 @@ function FireExplorer(p: {
       </p>
     </div>
   );
+  const selectedIncidentIsReported =
+    selected?.kind === "incident" &&
+    selected.value.id.startsWith("cwfis-active:");
+  const selectedIncidentSnapshot = selectedIncidentIsReported ? reported : inc;
   const selectedView =
     selected?.kind === "incident" ? (
       <>
-        <p class="eyebrow">Curated incident · NASA EONET</p>
+        <p class="eyebrow">
+          {selectedIncidentIsReported
+            ? "Reported incident · Natural Resources Canada CWFIS"
+            : "Curated incident · NASA EONET"}
+        </p>
         <h2 ref={details} tabIndex={-1}>
           {selected.value.title}
         </h2>
@@ -1025,6 +1089,24 @@ function FireExplorer(p: {
         <p>
           Open/closed does not establish burning, extinguished, or containment.
         </p>
+        {selectedIncidentIsReported && (
+          <dl>
+            <dt>Reporting agency</dt>
+            <dd>{selected.value.agency || "Unavailable"}</dd>
+            <dt>Control status</dt>
+            <dd>{selected.value.controlStatus || "Unavailable"}</dd>
+            <dt>Fire size</dt>
+            <dd>{measure(selected.value.areaHectares, "ha")}</dd>
+            <dt>Contained</dt>
+            <dd>{measure(selected.value.percentContained, "%")}</dd>
+            <dt>Status updated</dt>
+            <dd>
+              {selected.value.statusDate
+                ? showTime(selected.value.statusDate)
+                : "Unavailable"}
+            </dd>
+          </dl>
+        )}
         {selected.value.description && <p>{selected.value.description}</p>}
         <h3>Dated source geometry</h3>
         {selected.value.geometry.map((g) => (
@@ -1064,8 +1146,10 @@ function FireExplorer(p: {
             </p>
           ))}
         <p class="muted">
-          {inc?.fetched ? "Retrieved " + showTime(inc.fetched) : ""} ·{" "}
-          {selected.value.id}
+          {selectedIncidentSnapshot?.fetched
+            ? "Retrieved " + showTime(selectedIncidentSnapshot.fetched)
+            : ""}{" "}
+          · {selected.value.id}
         </p>
         <label>
           Proximity radius km
