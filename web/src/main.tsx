@@ -216,7 +216,10 @@ export function EarthquakeApp({ active = true }: { active?: boolean }) {
         poller = update;
         poll.current = setInterval(() => void update(), 500);
       }
-      const response = await fetch(target, { signal: controller.signal });
+      const response = await fetch(target, {
+        signal: controller.signal,
+        ...(next === "demo" ? { method: "POST" } : {}),
+      });
       const body = await response.json();
       stopPolling();
       if (poller) await poller();

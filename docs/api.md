@@ -1,6 +1,8 @@
 # Local API and export schema
 
-All endpoints are GET, same-origin JSON except static assets. Version 0.1.0.
+All read endpoints are GET and return same-origin JSON except static assets.
+`/api/demo` is a state-changing local snapshot operation and therefore uses
+same-origin POST. Version 0.1.0.
 
 | Endpoint | Result |
 |---|---|
@@ -8,7 +10,7 @@ All endpoints are GET, same-origin JSON except static assets. Version 0.1.0.
 | `/api/ready` | database readiness |
 | `/api/config` | default demo preference |
 | `/api/recent?period=hour|day|week|month` | complete recent feed or last-good stale snapshot |
-| `/api/demo` | embedded historical observations |
+| `POST /api/demo` | save and return embedded historical observations |
 | `/api/history?start=RFC3339&end=RFC3339&min=-2` | atomic half-open historical query; documented budgets apply |
 | `/api/detail/{USGS-event-id}` | allowlisted USGS GeoJSON event details |
 

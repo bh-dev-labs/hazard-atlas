@@ -105,7 +105,11 @@ func main() {
 		d, e := svc.Recent(r.Context(), r.URL.Query().Get("period"))
 		reply(w, d, e)
 	})
-	mux.HandleFunc("GET /api/demo", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("POST /api/demo", func(w http.ResponseWriter, r *http.Request) {
+		if !sameOrigin(r) {
+			http.Error(w, "same-origin required", http.StatusForbidden)
+			return
+		}
 		b, e := fs.ReadFile(static, "data/demo.geojson")
 		if e != nil {
 			reply(w, nil, e)
@@ -145,7 +149,7 @@ func main() {
 	})
 	mux.HandleFunc("DELETE /api/history/jobs/{id}", func(w http.ResponseWriter, r *http.Request) {
 		// A cancellation changes server state, so it must come from our own page.
-		if r.Header.Get("Origin") != "http://"+r.Host || r.Header.Get("Sec-Fetch-Site") != "same-origin" {
+		if !sameOrigin(r) {
 			w.WriteHeader(403)
 			reply(w, nil, nil)
 			return
@@ -179,7 +183,7 @@ func main() {
 		reply(w, map[string]uint64{"requests": requests.Load()}, nil)
 	})
 	mux.HandleFunc("POST /api/quit", func(w http.ResponseWriter, r *http.Request) {
-		if r.Header.Get("Origin") != "http://"+r.Host || r.Header.Get("Sec-Fetch-Site") != "same-origin" {
+		if !sameOrigin(r) {
 			http.Error(w, "same-origin required", 403)
 			return
 		}
@@ -191,7 +195,10 @@ func main() {
 		id := requests.Add(1)
 		w.Header().Set("X-Request-ID", fmt.Sprint(id))
 		w.Header().Set("X-Content-Type-Options", "nosniff")
+		w.Header().Set("X-Frame-Options", "DENY")
 		w.Header().Set("Referrer-Policy", "no-referrer")
+		w.Header().Set("Permissions-Policy", "camera=(), microphone=(), geolocation=(), payment=()")
+		w.Header().Set("Cross-Origin-Resource-Policy", "same-origin")
 		w.Header().Set("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'")
 		host, _, _ := net.SplitHostPort(r.Host)
 		if host != "127.0.0.1" && host != "localhost" && host != "::1" {
@@ -240,4 +247,18 @@ func main() {
 	if err = server.Serve(listener); err != nil && err != http.ErrServerClosed {
 		panic(err)
 	}
+}
+
+// sameOrigin protects endpoints that change local state. Origin is the
+// authoritative browser signal; Sec-Fetch-Site provides a second check in
+// modern browsers, while requests without either header remain usable for
+// local command-line clients.
+func sameOrigin(r *http.Request) bool {
+	if origin := r.Header.Get("Origin"); origin != "" && origin != "http://"+r.Host {
+		return false
+	}
+	if site := r.Header.Get("Sec-Fetch-Site"); site != "" && site != "same-origin" {
+		return false
+	}
+	return true
 }

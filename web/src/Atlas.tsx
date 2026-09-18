@@ -160,7 +160,10 @@ function FireExplorer(p: {
                 ? "demo=true"
                 : "query=" + encodeURIComponent(JSON.stringify(defaultQuery))),
           ),
-          fetch(cfg.demo ? "/api/demo" : "/api/recent?period=day"),
+          fetch(
+            cfg.demo ? "/api/demo" : "/api/recent?period=day",
+            cfg.demo ? { method: "POST" } : undefined,
+          ),
           fetch(
             "/api/wildfires/cwfis?" +
               (cfg.demo
