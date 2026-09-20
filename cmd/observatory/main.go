@@ -219,7 +219,7 @@ func main() {
 		fmt.Fprintln(os.Stderr, "Cannot start:", err, "\nAn existing observatory may be running. Open http://"+*addr+" or choose -addr 127.0.0.1:8788")
 		os.Exit(1)
 	}
-	server := &http.Server{Handler: handler, ReadHeaderTimeout: 5 * time.Second, IdleTimeout: 60 * time.Second}
+	server := &http.Server{Handler: handler, ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 30 * time.Second, MaxHeaderBytes: 64 << 10, IdleTimeout: 60 * time.Second}
 	go func() {
 		<-ctx.Done()
 		c, cancel := context.WithTimeout(context.Background(), 5*time.Second)
