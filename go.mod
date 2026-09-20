@@ -1,8 +1,6 @@
 module earthquake-observatory
 
-go 1.26.0
-
-toolchain go1.26.8
+go 1.27.1
 
 require modernc.org/sqlite v1.59.0
 
