@@ -40,6 +40,8 @@ type Service struct {
 	db     *sql.DB
 	client *http.Client
 	gate   lane
+	demoMu sync.Mutex
+	demo   *Snapshot
 }
 
 func New(db *sql.DB) (*Service, error) {
@@ -50,7 +52,7 @@ func New(db *sql.DB) (*Service, error) {
 	return &Service{db: db, client: &http.Client{Timeout: 25 * time.Second, CheckRedirect: func(_ *http.Request, _ []*http.Request) error { return fmt.Errorf("redirect denied") }}}, e
 }
 func (s *Service) save(d Snapshot, raw []byte) (Snapshot, error) {
-	d.ID = hash(append([]byte(d.Query+"\n"), raw...))
+	d.ID = hashPrefixed(d.Query+"\n", raw)
 	d.Schema = 1
 	payload, e := json.Marshal(d)
 	if e != nil {
@@ -219,7 +221,24 @@ func (s *Service) Retrieve(ctx context.Context, days int) (result Snapshot, resu
 	}{eonetRaw, gdacsRaw})
 	return s.save(d, raw)
 }
+
+// Demo returns the frozen fixture snapshot. The fixtures are embedded and
+// immutable, so they are parsed, joined and saved once per process and
+// served from memory afterwards.
 func (s *Service) Demo() (Snapshot, error) {
+	s.demoMu.Lock()
+	defer s.demoMu.Unlock()
+	if s.demo != nil {
+		return *s.demo, nil
+	}
+	d, e := s.buildDemo()
+	if e != nil {
+		return d, e
+	}
+	s.demo = &d
+	return d, nil
+}
+func (s *Service) buildDemo() (Snapshot, error) {
 	meta, _ := fixtures.ReadFile("testdata/provenance.json")
 	var provenance struct{ Retrieved string }
 	json.Unmarshal(meta, &provenance)
@@ -254,7 +273,15 @@ func (s *Service) Handler(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Query().Get("demo") == "true" {
 		d, err = s.Demo()
 	} else {
-		days, _ := strconv.Atoi(r.URL.Query().Get("days"))
+		days := 30
+		if v := r.URL.Query().Get("days"); v != "" {
+			n, e := strconv.Atoi(v)
+			if e != nil || n < 1 || n > 365 {
+				http.Error(w, `{"error":"days must be an integer from 1 to 365"}`, 400)
+				return
+			}
+			days = n
+		}
 		d, err = s.Retrieve(r.Context(), days)
 	}
 	if err != nil {

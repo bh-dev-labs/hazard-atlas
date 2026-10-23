@@ -3,12 +3,14 @@ import assert from "node:assert/strict";
 import {
   geometryAt,
   detectionsAt,
+  detectionEpoch,
   nearby,
   filterDetections,
   safeSource,
   type Incident,
   type Detection,
 } from "./wildfire";
+import { geometryEpochs } from "./timeline";
 const detection = (id: string, acquisition: string, lon = 0, lat = 0) =>
   ({
     id,
@@ -47,6 +49,29 @@ test("detection trailing window is left-exclusive right-inclusive across DST dat
     ["b"],
   );
   assert.equal(detectionsAt([a, b, c], Infinity, 1).length, 3);
+});
+test("detection epochs are parsed once per record and match Date.parse", () => {
+  const d = detection("a", "2026-11-01T05:00:00Z");
+  assert.equal(detectionEpoch(d), Date.parse("2026-11-01T05:00:00Z"));
+  assert.equal(detectionEpoch(d), detectionEpoch(d));
+  // A record that is replaced by a new object is parsed afresh; the cache is
+  // keyed by identity, never by id or acquisition string.
+  const later = { ...d, acquisition: "2026-11-01T06:00:00Z" };
+  assert.equal(detectionEpoch(later), Date.parse("2026-11-01T06:00:00Z"));
+  assert.ok(Number.isNaN(detectionEpoch(detection("x", "not a date"))));
+});
+test("geometry epochs: date-only records end at the end of the UTC day and sit at noon", () => {
+  const day = { date: "2026-09-05", precision: "day" as const };
+  const second = { date: "2026-09-06T12:30:00Z", precision: "second" as const };
+  assert.deepEqual(geometryEpochs(day), {
+    last: Date.parse("2026-09-05T23:59:59.999Z"),
+    noon: Date.parse("2026-09-05T12:00:00Z"),
+  });
+  assert.deepEqual(geometryEpochs(second), {
+    last: Date.parse("2026-09-06T12:30:00Z"),
+    noon: Date.parse("2026-09-06T12:30:00Z"),
+  });
+  assert.equal(geometryEpochs(day), geometryEpochs(day));
 });
 test("known spherical proximity and antimeridian filtering", () => {
   const ds = [

@@ -1,5 +1,5 @@
 import { memo } from "preact/compat";
-import type { Event, Region } from "./model";
+import { fmt, type Event, type Region } from "./model";
 
 type Props = {
   mode: string;
@@ -8,9 +8,6 @@ type Props = {
   focusRegion: (r: Region) => void;
   clearRegion: () => void;
 };
-
-const fmt = (v: number | null | undefined, digits = 1) =>
-  v == null ? "Unavailable" : v.toFixed(digits);
 
 function ActivityAreasView({
   mode,

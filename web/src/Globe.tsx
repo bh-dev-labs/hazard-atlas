@@ -10,7 +10,7 @@ import {
   geoContains,
 } from "d3-geo";
 import { feature } from "topojson-client";
-import { parse, type Font } from "opentype.js";
+import type { Font } from "opentype.js";
 import labelFontUrl from "@fontsource/noto-sans/files/noto-sans-latin-400-normal.woff?url";
 import type { FeatureCollection } from "geojson";
 import { corridorLines } from "./science";
@@ -56,6 +56,9 @@ type Props = {
 let earthPromise: Promise<any> | null = null,
   platePromise: Promise<any> | null = null;
 let labelFontPromise: Promise<Font> | null = null;
+// The graticule is a fixed MultiLineString; building it costs the same on
+// every frame, so build it once.
+const GRATICULE = geoGraticule10();
 export function Globe(p: Props) {
   const ref = useRef<HTMLCanvasElement>(null),
     live = useRef(p);
@@ -99,18 +102,38 @@ export function Globe(p: Props) {
   const invert = useRef<
     ((p: [number, number]) => [number, number] | null) | null
   >(null);
+  // The base-map effect owns the projection; the marker effect below reuses
+  // it so markers and hit targets always agree with the drawn geography.
+  const view = useRef<{
+    proj: ReturnType<typeof geoOrthographic>;
+    w: number;
+    h: number;
+    dpr: number;
+    pixelWidth: number;
+    pixelHeight: number;
+  } | null>(null);
   const [objectChoices, setObjectChoices] = useState<RenderObject[]>([]);
   const hits = useRef<{ e: Event; x: number; y: number; r: number }[]>([]);
   const pointers = useRef(new Map<number, [number, number]>());
   const drag = useRef({ x: 0, y: 0, moved: 0, pinch: 0, multi: false });
+  // opentype.js is more than half the main bundle and only country labels
+  // need it, so it is loaded as a separate chunk the first time labels are
+  // switched on rather than up front.
   useEffect(() => {
-    labelFontPromise ??= fetch(labelFontUrl).then(async (response) => {
+    if (!p.countries) return;
+    labelFontPromise ??= (async () => {
+      const [{ parse }, response] = await Promise.all([
+        import("opentype.js"),
+        fetch(labelFontUrl),
+      ]);
       if (!response.ok) throw new Error("Label font unavailable");
       return parse(await response.arrayBuffer());
-    });
+    })();
     labelFontPromise
       .then(setLabelFont)
       .catch(() => setError("Country labels unavailable."));
+  }, [p.countries]);
+  useEffect(() => {
     earthPromise ??= fetch("/data/earth.json")
       .then((r) => r.json())
       .then((t) => ({
@@ -189,7 +212,7 @@ export function Globe(p: Props) {
       setError("Canvas unavailable. Use the event table below.");
       return;
     }
-    let ctx = context;
+    const ctx = context;
     const [w, h] = size,
       dpr = devicePixelRatio || 1;
     // A hidden pane (display:none) reports a zero-width content rect. The
@@ -206,37 +229,6 @@ export function Globe(p: Props) {
     canvas.style.height = h + "px";
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.lineWidth = 1;
-    // Rasterize glyphs and sharp marker edges once, then translate the same
-    // image at the exact projected coordinate on every animation frame.
-    const style = `${dpr}:${theme}`;
-    if (spriteStyle.current !== style) {
-      sprites.current.clear();
-      spriteStyle.current = style;
-    }
-    const sprite = (
-      key: string,
-      width: number,
-      height: number,
-      paint: (context: CanvasRenderingContext2D) => void,
-    ) => {
-      let bitmap = sprites.current.get(key);
-      if (!bitmap) {
-        bitmap = document.createElement("canvas");
-        bitmap.width = Math.ceil(width * dpr);
-        bitmap.height = Math.ceil(height * dpr);
-        const context = bitmap.getContext("2d")!;
-        context.scale(dpr, dpr);
-        context.translate(bitmap.width / dpr / 2, bitmap.height / dpr / 2);
-        paint(context);
-        sprites.current.set(key, bitmap);
-      }
-      return bitmap;
-    };
-    const drawSprite = (bitmap: HTMLCanvasElement, x: number, y: number) => {
-      const width = bitmap.width / dpr,
-        height = bitmap.height / dpr;
-      ctx.drawImage(bitmap, x - width / 2, y - height / 2, width, height);
-    };
     ctx.clearRect(0, 0, w, h);
     const proj = p.flat
       ? geoEquirectangular()
@@ -249,7 +241,8 @@ export function Globe(p: Props) {
           .translate([w / 2, h / 2])
           .clipAngle(90);
     invert.current = proj.invert ? (xy) => proj.invert!(xy) : null;
-    let path = geoPath(proj, ctx);
+    view.current = { proj, w, h, dpr, pixelWidth, pixelHeight };
+    const path = geoPath(proj, ctx);
     ctx.beginPath();
     path({ type: "Sphere" });
     ctx.fillStyle = token("--globe-ocean");
@@ -263,7 +256,7 @@ export function Globe(p: Props) {
       ctx.fill();
     }
     ctx.beginPath();
-    path(geoGraticule10());
+    path(GRATICULE);
     ctx.strokeStyle = token("--globe-graticule");
     ctx.lineWidth = 0.55;
     ctx.stroke();
@@ -337,6 +330,7 @@ export function Globe(p: Props) {
     layer.style.width = w + "px";
     layer.style.height = h + "px";
     layer.style.display = p.countries ? "block" : "none";
+    const style = `${dpr}:${theme}`;
     if (labelStyle.current !== style) {
       layer.replaceChildren();
       labelElements.current.clear();
@@ -351,7 +345,6 @@ export function Globe(p: Props) {
             countries,
             (name, size) => labelFont.getAdvanceWidth(name, size),
             proj.scale(),
-            p.camera.zoom,
           ),
         };
       }
@@ -399,16 +392,67 @@ export function Globe(p: Props) {
         glyph.style.opacity = String(alpha);
       }
     }
-    const markers = markerLayer.current!;
+  }, [
+    earth,
+    countries,
+    plates,
+    labelFont,
+    size,
+    theme,
+    p.camera,
+    p.flat,
+    p.plates,
+    p.countries,
+    p.region,
+    p.section,
+    p.transect,
+  ]);
+  // Markers live on their own canvas so a replay frame, hover or selection
+  // change repaints only them and leaves the base map above untouched.
+  useLayoutEffect(() => {
+    const markers = markerLayer.current;
+    if (!markers || !view.current) return;
+    const { proj, w, h, dpr, pixelWidth, pixelHeight } = view.current;
     if (markers.width !== pixelWidth) markers.width = pixelWidth;
     if (markers.height !== pixelHeight) markers.height = pixelHeight;
     markers.style.width = w + "px";
     markers.style.height = h + "px";
-    ctx = markers.getContext("2d")!;
+    const ctx = markers.getContext("2d")!;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, w, h);
     ctx.lineWidth = 1;
-    path = geoPath(proj, ctx);
+    const path = geoPath(proj, ctx);
+    // Rasterize glyphs and sharp marker edges once, then translate the same
+    // image at the exact projected coordinate on every animation frame.
+    const style = `${dpr}:${theme}`;
+    if (spriteStyle.current !== style) {
+      sprites.current.clear();
+      spriteStyle.current = style;
+    }
+    const sprite = (
+      key: string,
+      width: number,
+      height: number,
+      paint: (context: CanvasRenderingContext2D) => void,
+    ) => {
+      let bitmap = sprites.current.get(key);
+      if (!bitmap) {
+        bitmap = document.createElement("canvas");
+        bitmap.width = Math.ceil(width * dpr);
+        bitmap.height = Math.ceil(height * dpr);
+        const context = bitmap.getContext("2d")!;
+        context.scale(dpr, dpr);
+        context.translate(bitmap.width / dpr / 2, bitmap.height / dpr / 2);
+        paint(context);
+        sprites.current.set(key, bitmap);
+      }
+      return bitmap;
+    };
+    const drawSprite = (bitmap: HTMLCanvasElement, x: number, y: number) => {
+      const width = bitmap.width / dpr,
+        height = bitmap.height / dpr;
+      ctx.drawImage(bitmap, x - width / 2, y - height / 2, width, height);
+    };
     hits.current = [];
     const ordered = [
       ...p.events.filter((e) => e.id !== p.selected),
@@ -680,24 +724,15 @@ export function Globe(p: Props) {
       });
     }
   }, [
-    earth,
-    countries,
-    plates,
+    size,
+    theme,
+    p.camera,
+    p.flat,
+    p.overview,
     p.events,
     p.objects,
     p.hazards,
-    p.overview,
     p.selected,
-    p.camera,
-    p.flat,
-    p.plates,
-    p.countries,
-    p.region,
-    p.section,
-    p.transect,
-    labelFont,
-    size,
-    theme,
     cursor,
     spiderfied,
   ]);

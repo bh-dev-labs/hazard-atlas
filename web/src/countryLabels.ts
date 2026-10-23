@@ -112,7 +112,6 @@ export function planLabels(
   countries: CountryLabel[],
   measure: (name: string, size: number) => number,
   scale: number,
-  _zoom: number,
   gap = 6,
 ): LabelPlan {
   const plan: LabelPlan = [];
