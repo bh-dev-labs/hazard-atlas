@@ -1,6 +1,6 @@
 import { memo } from "preact/compat";
 import type { Ref } from "preact";
-import { zoneLabel, type Event } from "./model";
+import { fmt, safeURL, utc, zoneLabel, type Event } from "./model";
 import type { Detail } from "./data";
 import { uncertainty } from "./science";
 
@@ -28,22 +28,6 @@ type Props = {
   setNearRadius: (v: number) => void;
   nearHours: number;
   setNearHours: (v: number) => void;
-};
-
-const fmt = (v: number | null | undefined, digits = 1) =>
-  v == null ? "Unavailable" : v.toFixed(digits);
-const utc = (t: number) =>
-  new Date(t).toISOString().replace("T", " ").replace(".000Z", " UTC");
-const safeURL = (s: string) => {
-  try {
-    const u = new URL(s);
-    return u.protocol === "https:" &&
-      (u.hostname === "earthquake.usgs.gov" || u.hostname === "www.usgs.gov")
-      ? u.href
-      : "";
-  } catch {
-    return "";
-  }
 };
 
 function SelectedEventView({
@@ -78,7 +62,7 @@ function SelectedEventView({
         <button
           class="clear-selection"
           onClick={closeSelection}
-          aria-label="Close event details"
+          aria-label="Clear selection and close event details"
           title="Close these details (Esc)"
         >
           Clear selection <span aria-hidden="true">×</span>

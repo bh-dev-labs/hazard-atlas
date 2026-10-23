@@ -50,12 +50,12 @@ test("country labels hide the far side of the globe but remain available on the 
 
 test("country label plans stay stable while the camera rotates", () => {
   const measure = (name: string, size: number) => name.length * size * 0.55;
-  const plan = planLabels(labels, measure, 380, 1).filter(
+  const plan = planLabels(labels, measure, 380).filter(
     (entry) => entry.opacity > 0,
   );
   assert.ok(plan.some((entry) => entry.label.name === "Japan"));
   assert.deepEqual(
-    planLabels(labels, measure, 380, 1)
+    planLabels(labels, measure, 380)
       .filter((entry) => entry.opacity > 0)
       .map((entry) => entry.label.name),
     plan.map((entry) => entry.label.name),

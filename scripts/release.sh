@@ -1,8 +1,6 @@
 #!/bin/sh
 set -eu
 cd "$(dirname "$0")/.."
-export GOCACHE="${GOCACHE:-/private/tmp/atlas-go-cache}"
-export GOPATH="${GOPATH:-/private/tmp/atlas-go}"
 npm ci
 npm run build
 npm test

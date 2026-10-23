@@ -16,7 +16,7 @@ The app opens `http://127.0.0.1:8789`. Only the local computer can access the se
 
 ## Development
 
-Prerequisites: Go 1.26+ (tested with 1.27.1), Node 22.12+ (tested with 26.8.1), npm. Python 3 is used only to create ZIP archives. Pinned dependencies are in go.mod/go.sum and package-lock.json.
+Prerequisites: Go 1.27.3+ (tested with 1.27.3), Node 22.12+ (tested with 26.8.1), npm. Python 3 is used only to create ZIP archives. Pinned dependencies are in go.mod/go.sum and package-lock.json.
 
 macOS/Linux:
 

@@ -10,6 +10,7 @@ import {
   queryURL,
   validRegion,
   clampPage,
+  extent,
   RequestGate,
   validSection,
 } from "./data";
@@ -154,4 +155,16 @@ test("transects reject coincident and antipodal endpoints", () => {
     validSection({ start: [170, -22], end: [-170, -22], width: 400 }),
     true,
   );
+});
+
+test("extent matches Math.min/Math.max without spreading the array", () => {
+  assert.deepEqual(extent([3, -1, 7, 7, 0]), [-1, 7]);
+  assert.deepEqual(extent([5]), [5, 5]);
+  assert.deepEqual(extent([]), [Infinity, -Infinity]);
+  assert.deepEqual(extent(new Float64Array([2, 1])), [1, 2]);
+  const withNaN = extent([1, NaN, 2]);
+  assert.ok(Number.isNaN(withNaN[0]) && Number.isNaN(withNaN[1]));
+  // Past the engine's argument limit, Math.min(...big) throws; extent does not.
+  const big = Array.from({ length: 200000 }, (_, i) => i - 100000);
+  assert.deepEqual(extent(big), [-100000, 99999]);
 });

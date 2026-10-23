@@ -74,12 +74,23 @@ export type RenderObject = {
 export function geometryAt(incident: Incident, cursor: number): FireGeometry[] {
   return timelineGeometryAt(incident.geometry, cursor);
 }
+// Every replay tick re-filters up to 50,000 detections, and Date.parse on each
+// one was the dominant cost. The epoch is parsed once per detection object.
+const epochs = new WeakMap<Detection, number>();
+export function detectionEpoch(d: Detection): number {
+  let t = epochs.get(d);
+  if (t === undefined) {
+    t = Date.parse(d.acquisition);
+    epochs.set(d, t);
+  }
+  return t;
+}
 export function detectionsAt(ds: Detection[], cursor: number, hours: number) {
+  const window = hours * 3600000;
+  const bounded = Number.isFinite(cursor);
   return ds.filter((d) => {
-    const t = Date.parse(d.acquisition);
-    return (
-      t <= cursor && (!Number.isFinite(cursor) || t > cursor - hours * 3600000)
-    );
+    const t = detectionEpoch(d);
+    return t <= cursor && (!bounded || t > cursor - window);
   });
 }
 export function nearby(
@@ -89,12 +100,14 @@ export function nearby(
   start: number,
   end: number,
 ) {
-  return ds.filter(
-    (d) =>
-      distance(point, [d.longitude, d.latitude]) <= radius &&
-      Date.parse(d.acquisition) >= start &&
-      Date.parse(d.acquisition) <= end,
-  );
+  return ds.filter((d) => {
+    const t = detectionEpoch(d);
+    return (
+      t >= start &&
+      t <= end &&
+      distance(point, [d.longitude, d.latitude]) <= radius
+    );
+  });
 }
 export function filterDetections(
   ds: Detection[],

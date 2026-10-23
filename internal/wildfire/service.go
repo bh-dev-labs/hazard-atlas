@@ -33,16 +33,39 @@ type Snapshot struct {
 	Detections []Detection `json:"detections"`
 	Sources    []Source    `json:"sources"`
 }
+
+// snapshotPayload mirrors Snapshot field for field, with members as
+// pre-encoded JSON so save can serialize each one exactly once. Keep the
+// field order and tags identical to Snapshot: the stored payload is read
+// back into Snapshot by latest.
+type snapshotPayload struct {
+	ID         string            `json:"id"`
+	Schema     int               `json:"schema"`
+	Provider   string            `json:"provider"`
+	Product    string            `json:"product"`
+	Query      string            `json:"query"`
+	Fetched    string            `json:"fetched"`
+	State      string            `json:"state"`
+	Complete   bool              `json:"complete"`
+	Demo       bool              `json:"demo"`
+	Error      string            `json:"error,omitempty"`
+	Coverage   *Query            `json:"coverage,omitempty"`
+	Incidents  []json.RawMessage `json:"incidents"`
+	Detections []json.RawMessage `json:"detections"`
+	Sources    []Source          `json:"sources"`
+}
 type lane struct {
 	mu   sync.Mutex
 	next time.Time
 	last Snapshot
 }
 type Service struct {
-	db                        *sql.DB
-	key                       string
-	client                    *http.Client
-	eonet, firms, cwfisActive lane
+	db                               *sql.DB
+	key                              string
+	client                           *http.Client
+	eonet, firms, cwfis, cwfisActive lane
+	demoMu                           sync.Mutex
+	demo                             map[string]Snapshot
 }
 
 func New(db *sql.DB, key string) (*Service, error) {
@@ -54,9 +77,27 @@ func New(db *sql.DB, key string) (*Service, error) {
 	return &Service{db: db, key: strings.TrimSpace(key), client: &http.Client{Timeout: 25 * time.Second, CheckRedirect: func(_ *http.Request, _ []*http.Request) error { return fmt.Errorf("redirect denied") }}}, e
 }
 func (s *Service) save(d Snapshot, raw []byte) (Snapshot, error) {
-	d.ID = hash(append([]byte(d.Provider+"\n"+d.Query+"\n"), raw...))
+	d.ID = hashPrefixed(d.Provider+"\n"+d.Query+"\n", raw)
 	d.Schema = 1
-	payload, e := json.Marshal(d)
+	// Encode each member once: the same bytes serve both the snapshot payload
+	// (via snapshotPayload) and the per-member wildfire_members rows.
+	incidents := make([]json.RawMessage, len(d.Incidents))
+	for i, v := range d.Incidents {
+		b, e := json.Marshal(v)
+		if e != nil {
+			return d, e
+		}
+		incidents[i] = b
+	}
+	detections := make([]json.RawMessage, len(d.Detections))
+	for i, v := range d.Detections {
+		b, e := json.Marshal(v)
+		if e != nil {
+			return d, e
+		}
+		detections[i] = b
+	}
+	payload, e := json.Marshal(snapshotPayload{d.ID, d.Schema, d.Provider, d.Product, d.Query, d.Fetched, d.State, d.Complete, d.Demo, d.Error, d.Coverage, incidents, detections, d.Sources})
 	if e != nil {
 		return d, e
 	}
@@ -76,15 +117,13 @@ func (s *Service) save(d Snapshot, raw []byte) (Snapshot, error) {
 		return d, e
 	}
 	defer stmt.Close()
-	for _, v := range d.Incidents {
-		b, _ := json.Marshal(v)
-		if _, e = stmt.Exec(d.ID, v.ID, "incident", b); e != nil {
+	for i, v := range d.Incidents {
+		if _, e = stmt.Exec(d.ID, v.ID, "incident", []byte(incidents[i])); e != nil {
 			return d, e
 		}
 	}
-	for _, v := range d.Detections {
-		b, _ := json.Marshal(v)
-		if _, e = stmt.Exec(d.ID, v.ID, "detection", b); e != nil {
+	for i, v := range d.Detections {
+		if _, e = stmt.Exec(d.ID, v.ID, "detection", []byte(detections[i])); e != nil {
 			return d, e
 		}
 	}
@@ -139,6 +178,14 @@ func (s *Service) Retrieve(ctx context.Context, provider string, q Query) (resul
 		if end == "" {
 			end = time.Now().UTC().Format("2006-01-02")
 		}
+		st, e1 := time.Parse("2006-01-02", start)
+		en, e2 := time.Parse("2006-01-02", end)
+		if e1 != nil || e2 != nil {
+			return Snapshot{}, fmt.Errorf("valid UTC dates required")
+		}
+		if en.Before(st) || en.Sub(st) > 366*24*time.Hour {
+			return Snapshot{}, fmt.Errorf("start must not be after end and the span must be at most one year")
+		}
 		query = "wildfires; status all; " + start + " through " + end
 		u = "https://eonet.gsfc.nasa.gov/api/v3/events?category=wildfires&status=all&start=" + url.QueryEscape(start) + "&end=" + url.QueryEscape(end) + "&limit=1000"
 		gate = &s.eonet
@@ -165,7 +212,7 @@ func (s *Service) Retrieve(ctx context.Context, provider string, q Query) (resul
 			return Snapshot{}, fmt.Errorf("valid non-future UTC date required")
 		}
 		query = "CWFIS Fire M3 daily hotspots; Canada bounding box; " + q.Start + " UTC"
-		gate = &s.firms
+		gate = &s.cwfis
 		ttl = 3 * time.Hour
 	} else if provider == "cwfis-active" {
 		query = "CWFIS current agency-reported active wildland fires"
@@ -245,14 +292,18 @@ func (s *Service) Retrieve(ctx context.Context, provider string, q Query) (resul
 			}
 			encoded, _ := json.Marshal(string(b))
 			chunks = append(chunks, encoded)
+			start, _ := time.Parse("2006-01-02", q.Start)
+			end := start.Add(time.Duration(q.Days) * 24 * time.Hour)
 			for _, v := range ds {
-				start, _ := time.Parse("2006-01-02", q.Start)
-				acq, _ := time.Parse(time.RFC3339, v.Acquisition)
+				acq := v.acquired
+				if acq.IsZero() {
+					acq, _ = time.Parse(time.RFC3339, v.Acquisition)
+				}
 				insideLon := v.Longitude >= q.West && v.Longitude <= q.East
 				if q.West > q.East {
 					insideLon = v.Longitude >= q.West || v.Longitude <= q.East
 				}
-				if !insideLon || v.Latitude < q.South || v.Latitude > q.North || acq.Before(start) || !acq.Before(start.Add(time.Duration(q.Days)*24*time.Hour)) {
+				if !insideLon || v.Latitude < q.South || v.Latitude > q.North || acq.Before(start) || !acq.Before(end) {
 					err = fmt.Errorf("provider returned observations outside requested coverage")
 					break
 				}
@@ -319,7 +370,27 @@ func (s *Service) Retrieve(ctx context.Context, provider string, q Query) (resul
 	}
 	return s.save(d, raw)
 }
+
+// Demo returns the frozen fixture snapshot for provider. Fixtures are
+// embedded and immutable, so each provider is parsed and saved once per
+// process and served from memory afterwards.
 func (s *Service) Demo(provider string) (Snapshot, error) {
+	s.demoMu.Lock()
+	defer s.demoMu.Unlock()
+	if d, ok := s.demo[provider]; ok {
+		return d, nil
+	}
+	d, e := s.buildDemo(provider)
+	if e != nil {
+		return d, e
+	}
+	if s.demo == nil {
+		s.demo = map[string]Snapshot{}
+	}
+	s.demo[provider] = d
+	return d, nil
+}
+func (s *Service) buildDemo(provider string) (Snapshot, error) {
 	meta, _ := fixtures.ReadFile("testdata/provenance.json")
 	var provenance struct{ Retrieved string }
 	json.Unmarshal(meta, &provenance)
