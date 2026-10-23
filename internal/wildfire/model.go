@@ -72,6 +72,9 @@ type Detection struct {
 	HFI         *float64 `json:"hfi,omitempty"`
 	SFC         *float64 `json:"sfc,omitempty"`
 	TFC         *float64 `json:"tfc,omitempty"`
+	// acquired is Acquisition as parsed by ParseFIRMS; unexported so the JSON
+	// output is unchanged and callers need not re-parse the formatted string.
+	acquired time.Time
 }
 type Query struct {
 	West  float64 `json:"west"`
@@ -118,6 +121,15 @@ func (q Query) Parts() []Query {
 	return []Query{a, b}
 }
 func hash(raw []byte) string { s := sha256.Sum256(raw); return hex.EncodeToString(s[:]) }
+
+// hashPrefixed hashes prefix followed by raw without concatenating them, so
+// a multi-megabyte provider body is not copied just to prepend its key.
+func hashPrefixed(prefix string, raw []byte) string {
+	h := sha256.New()
+	io.WriteString(h, prefix)
+	h.Write(raw)
+	return hex.EncodeToString(h.Sum(nil))
+}
 func validPoint(p []float64) bool {
 	return len(p) == 2 && !math.IsNaN(p[0]) && !math.IsNaN(p[1]) && math.Abs(p[0]) <= 180 && math.Abs(p[1]) <= 90
 }
@@ -379,8 +391,10 @@ func ParseFIRMS(raw []byte) ([]Detection, error) {
 		if get("version") == "" || (get("daynight") != "D" && get("daynight") != "N") {
 			return nil, fmt.Errorf("invalid product metadata")
 		}
-		d := Detection{Acquisition: t.UTC().Format(time.RFC3339), Precision: "minute", Longitude: *lon, Latitude: *lat, Satellite: "NOAA-20", Instrument: "VIIRS", Product: Product, Version: get("version"), Confidence: conf, DayNight: get("daynight")}
-		for k, dest := range map[string]**float64{"bright_ti4": &d.BrightI4, "bright_ti5": &d.BrightI5, "frp": &d.FRP, "scan": &d.Scan, "track": &d.Track} {
+		d := Detection{acquired: t.UTC(), Acquisition: t.UTC().Format(time.RFC3339), Precision: "minute", Longitude: *lon, Latitude: *lat, Satellite: "NOAA-20", Instrument: "VIIRS", Product: Product, Version: get("version"), Confidence: conf, DayNight: get("daynight")}
+		dests := [...]**float64{&d.BrightI4, &d.BrightI5, &d.FRP, &d.Scan, &d.Track}
+		for i, k := range firmsMeasurements {
+			dest := dests[i]
 			v, e := num(k)
 			if e != nil {
 				return nil, e
@@ -401,6 +415,13 @@ func ParseFIRMS(raw []byte) ([]Detection, error) {
 	}
 	return out, nil
 }
+
+// Optional numeric columns, in the order of the destination fields each
+// parser lists per row; package-level so no map is allocated per CSV record.
+var (
+	firmsMeasurements = [...]string{"bright_ti4", "bright_ti5", "frp", "scan", "track"}
+	cwfisMeasurements = [...]string{"fwi", "ros", "hfi", "sfc", "tfc"}
+)
 
 // ParseCWFISHotspots reads the public Canadian Wildland Fire Information
 // System Fire M3 daily hotspot CSV. These are satellite observations with
@@ -454,7 +475,9 @@ func ParseCWFISHotspots(raw []byte) ([]Detection, error) {
 		}
 		identity := fmt.Sprintf("CWFIS_FIREM3|%s|%s|%s|%.8f|%.8f", get(row, "sensor"), get(row, "source"), t.UTC().Format(time.RFC3339), lon, lat)
 		d := Detection{ID: "cwfis:" + hash([]byte(identity)), Acquisition: t.UTC().Format(time.RFC3339), Precision: "second", Longitude: lon, Latitude: lat, Satellite: get(row, "satellite"), SourceCode: get(row, "source"), Agency: get(row, "agency"), Fuel: get(row, "fuel"), Instrument: get(row, "sensor"), Product: "CWFIS_FIREM3_HOTSPOTS", Version: "daily", Confidence: "unknown", DayNight: "unknown"}
-		for k, dest := range map[string]**float64{"fwi": &d.FWI, "ros": &d.ROS, "hfi": &d.HFI, "sfc": &d.SFC, "tfc": &d.TFC} {
+		dests := [...]**float64{&d.FWI, &d.ROS, &d.HFI, &d.SFC, &d.TFC}
+		for i, k := range cwfisMeasurements {
+			dest := dests[i]
 			value := get(row, k)
 			if value == "" {
 				continue

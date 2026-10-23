@@ -19,7 +19,6 @@ import { useStable } from "./hooks";
 import { sources, glossary, lessons } from "./content";
 import {
   areaGroups,
-  color,
   csvCell,
   defaults,
   distance,
@@ -36,7 +35,10 @@ import {
   defaultSection,
   type Section,
   errorMessage,
+  type Fetched,
   freshDetail,
+  loadConfig,
+  loadInitialDataset,
   parseDataset,
   parseDetail,
   parseSnapshot,
@@ -49,21 +51,8 @@ import {
 } from "./data";
 import "./style.css";
 type SortKey = "mag" | "place" | "depth" | "time" | "status";
-const fmt = (v: number | null | undefined, digits = 1) =>
-  v == null ? "Unavailable" : v.toFixed(digits);
 const utc = (t: number) =>
   new Date(t).toISOString().replace("T", " ").replace(".000Z", " UTC");
-const safeURL = (s: string) => {
-  try {
-    const u = new URL(s);
-    return u.protocol === "https:" &&
-      (u.hostname === "earthquake.usgs.gov" || u.hostname === "www.usgs.gov")
-      ? u.href
-      : "";
-  } catch {
-    return "";
-  }
-};
 const storedAuto = () => {
   try {
     return (
@@ -176,7 +165,13 @@ export function EarthquakeApp({ active = true }: { active?: boolean }) {
       previous ? { ...previous, state: "cancelled" } : null,
     );
   }
-  async function load(next: string, url?: string) {
+  // `prefetched` lets the startup load share the dataset request the overview
+  // already made; every later load fetches afresh with an abort signal.
+  async function load(
+    next: string,
+    url?: string,
+    prefetched?: Promise<Fetched>,
+  ) {
     abort.current?.abort();
     stopPolling();
     releaseJob();
@@ -216,14 +211,15 @@ export function EarthquakeApp({ active = true }: { active?: boolean }) {
         poller = update;
         poll.current = setInterval(() => void update(), 500);
       }
-      const response = await fetch(target, {
-        signal: controller.signal,
-        ...(next === "demo" ? { method: "POST" } : {}),
-      });
-      const body = await response.json();
+      const { ok, body } = prefetched
+        ? await prefetched
+        : await fetch(target, {
+            signal: controller.signal,
+            ...(next === "demo" ? { method: "POST" } : {}),
+          }).then(async (r) => ({ ok: r.ok, body: await r.json() }));
       stopPolling();
       if (poller) await poller();
-      if (!response.ok)
+      if (!ok)
         throw Error(
           (record(body) && typeof body.error === "string" && body.error) ||
             "Data retrieval failed",
@@ -276,8 +272,11 @@ export function EarthquakeApp({ active = true }: { active?: boolean }) {
     }
   }
   loadRef.current = load;
+  // The first retrieval waits for the module's first activation: on the
+  // Overview route this tab is hidden, and the overview has already asked
+  // for the same dataset, so activation reuses that shared request.
   useEffect(() => {
-    if (initialized.current) return;
+    if (!active || initialized.current) return;
     initialized.current = true;
     const q = new URLSearchParams(location.search);
     try {
@@ -310,11 +309,12 @@ export function EarthquakeApp({ active = true }: { active?: boolean }) {
         `The shared view was invalid; showing defaults. ${errorMessage(err)}`,
       );
     }
-    fetch("/api/config")
-      .then((r) => r.json())
-      .then((c) => load(c.demo ? "demo" : "day"))
+    loadConfig()
+      .then((c) =>
+        load(c.demo ? "demo" : "day", undefined, loadInitialDataset(c.demo)),
+      )
       .catch(() => load("demo"));
-  }, []);
+  }, [active]);
   useEffect(() => {
     fetch("/api/health")
       .then((r) => r.json())
@@ -324,6 +324,7 @@ export function EarthquakeApp({ active = true }: { active?: boolean }) {
   useEffect(() => {
     const id = setInterval(() => {
       if (
+        active &&
         !document.hidden &&
         !busy &&
         !playing &&
@@ -334,7 +335,7 @@ export function EarthquakeApp({ active = true }: { active?: boolean }) {
         loadRef.current(mode);
     }, 60000);
     return () => clearInterval(id);
-  }, [mode, busy, playing, selected, lesson]);
+  }, [active, mode, busy, playing, selected, lesson]);
   useEffect(() => {
     if (dataset && selectionToken.current === -1) {
       const wanted = pendingSelection.current;

@@ -334,6 +334,22 @@ export function parseView(value: unknown): View {
   };
 }
 
+// Math.min(...values) spreads the array onto the call stack, which is slow
+// for tens of thousands of values and throws past the engine's argument
+// limit. Returns [Infinity, -Infinity] for an empty input, like Math.min()
+// and Math.max() of no arguments, and [NaN, NaN] if any value is NaN.
+export function extent(values: ArrayLike<number>): [number, number] {
+  let lo = Infinity,
+    hi = -Infinity;
+  for (let i = 0; i < values.length; i++) {
+    const v = values[i];
+    if (v !== v) return [NaN, NaN];
+    if (v < lo) lo = v;
+    if (v > hi) hi = v;
+  }
+  return [lo, hi];
+}
+
 export function clampPage(page: number, count: number) {
   return Math.max(0, Math.min(page, Math.ceil(count / 40) - 1));
 }
@@ -383,4 +399,37 @@ export class RequestGate {
   current(ticket: number) {
     return ticket === this.ticket;
   }
+}
+
+// Three modules ask the server whether it is in demo mode at startup, and two
+// of them then ask for the same initial earthquake dataset. Each request is
+// made once and the promise is shared; a failure clears the cache so a later
+// caller can retry rather than inheriting a stale rejection.
+export type Config = { demo: boolean };
+let configPromise: Promise<Config> | null = null;
+export function loadConfig(): Promise<Config> {
+  if (!configPromise)
+    configPromise = fetch("/api/config")
+      .then((r) => r.json())
+      .then((c) => ({ demo: record(c) && c.demo === true }))
+      .catch((e) => {
+        configPromise = null;
+        throw e;
+      });
+  return configPromise;
+}
+export type Fetched = { ok: boolean; body: unknown };
+let initialPromise: Promise<Fetched> | null = null;
+export function loadInitialDataset(demo: boolean): Promise<Fetched> {
+  if (!initialPromise)
+    initialPromise = fetch(
+      demo ? "/api/demo" : "/api/recent?period=day",
+      demo ? { method: "POST" } : undefined,
+    )
+      .then(async (r) => ({ ok: r.ok, body: await r.json() }))
+      .catch((e) => {
+        initialPromise = null;
+        throw e;
+      });
+  return initialPromise;
 }

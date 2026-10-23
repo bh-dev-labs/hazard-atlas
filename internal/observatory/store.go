@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
 	_ "modernc.org/sqlite"
 	"time"
 )
@@ -40,13 +41,23 @@ func Open(path string) (*Store, error) {
 	}
 	return &Store{db}, nil
 }
+
+// datasetID is the content address of a dataset: sha256 over the query, a
+// newline and the raw payload. Hashing in two writes avoids copying the
+// (up to 32 MiB) payload just to prepend the query.
+func datasetID(query string, raw []byte) string {
+	h := sha256.New()
+	io.WriteString(h, query)
+	io.WriteString(h, "\n")
+	h.Write(raw)
+	return hex.EncodeToString(h.Sum(nil))
+}
 func (s *Store) Save(query string, raw []byte) (Dataset, error) {
 	c, err := Parse(raw)
 	if err != nil {
 		return Dataset{}, err
 	}
-	hash := sha256.Sum256(append([]byte(query+"\n"), raw...))
-	id := hex.EncodeToString(hash[:])
+	id := datasetID(query, raw)
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	tx, err := s.DB.Begin()
 	if err != nil {
@@ -88,6 +99,20 @@ func (s *Store) Save(query string, raw []byte) (Dataset, error) {
 	}
 	return Dataset{id, query, now, true, false, "", raw}, nil
 }
+
+// Touch restarts the freshness window of an existing dataset without
+// re-parsing or re-inserting its members; use it when upstream reports the
+// content unchanged (HTTP 304). It returns sql.ErrNoRows if id is unknown.
+func (s *Store) Touch(id string, fetched time.Time) error {
+	res, err := s.DB.Exec(`UPDATE datasets SET fetched=? WHERE id=?`, fetched.UTC().Format(time.RFC3339Nano), id)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return sql.ErrNoRows
+	}
+	return nil
+}
 func (s *Store) Latest(query string) (Dataset, error) {
 	var d Dataset
 	err := s.DB.QueryRow(`SELECT id,query,fetched,payload FROM datasets WHERE query=? ORDER BY fetched DESC LIMIT 1`, query).Scan(&d.ID, &d.Query, &d.Fetched, &d.Data)
@@ -95,9 +120,17 @@ func (s *Store) Latest(query string) (Dataset, error) {
 	return d, err
 }
 func (s *Store) Backup(path string) error { _, err := s.DB.Exec(`VACUUM INTO ?`, path); return err }
-func (s *Store) Check() error {
+
+// Check runs a full integrity check; use it for the -check-db command.
+func (s *Store) Check() error { return s.pragmaCheck("integrity_check") }
+
+// QuickCheck skips index-content verification and is cheap enough for a
+// readiness probe.
+func (s *Store) QuickCheck() error { return s.pragmaCheck("quick_check") }
+
+func (s *Store) pragmaCheck(name string) error {
 	var result string
-	if err := s.DB.QueryRow(`PRAGMA integrity_check`).Scan(&result); err != nil {
+	if err := s.DB.QueryRow(`PRAGMA ` + name).Scan(&result); err != nil {
 		return err
 	}
 	if result != "ok" {

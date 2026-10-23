@@ -202,3 +202,41 @@ func TestCappedEONETPreservesValidatedIncidents(t *testing.T) {
 		t.Fatal("cap bypassed validation")
 	}
 }
+
+func TestCWFISUsesItsOwnRateLimitLane(t *testing.T) {
+	s := testService(t)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { http.Error(w, "down", 503) }))
+	defer server.Close()
+	s.client = &http.Client{Transport: rewriteTransport{base: server.URL}}
+	d, e := s.Retrieve(context.Background(), "cwfis", Query{Start: "2026-09-05"})
+	if e != nil || d.State != "failed" {
+		t.Fatalf("cwfis retrieve: state=%s err=%v", d.State, e)
+	}
+	if s.cwfis.next.IsZero() {
+		t.Fatal("cwfis lane gate not advanced")
+	}
+	if !s.firms.next.IsZero() || !s.eonet.next.IsZero() || !s.cwfisActive.next.IsZero() {
+		t.Fatal("cwfis retrieve advanced another provider's gate")
+	}
+}
+func TestSavedPayloadMatchesSnapshotEncoding(t *testing.T) {
+	s := testService(t)
+	for _, provider := range []string{"eonet", "firms", "cwfis"} {
+		d, e := s.Demo(provider)
+		if e != nil {
+			t.Fatal(provider, e)
+		}
+		want, _ := json.Marshal(d)
+		var stored []byte
+		if e = s.db.QueryRow(`SELECT payload FROM wildfire_snapshots WHERE id=?`, d.ID).Scan(&stored); e != nil {
+			t.Fatal(provider, e)
+		}
+		if string(stored) != string(want) {
+			t.Fatalf("%s: stored payload differs from json.Marshal(Snapshot)", provider)
+		}
+		again, e := s.Demo(provider)
+		if e != nil || again.ID != d.ID {
+			t.Fatal(provider, "cached demo differs", e)
+		}
+	}
+}

@@ -7,7 +7,7 @@ import {
   transect,
   type Event,
 } from "./model";
-import { useState } from "preact/hooks";
+import { useMemo, useState } from "preact/hooks";
 import { useMeasure } from "./hooks";
 import type { Section } from "./data";
 
@@ -15,14 +15,25 @@ const HOUR = 3600000,
   DAY = 86400000;
 const pad = (n: number) => String(n).padStart(2, "0");
 
+// Math.min(...values) spreads the array onto the call stack and overflows
+// somewhere past 100k items; a loop is safe at any size and faster anyway.
+function extent(values: number[]): [number, number] {
+  let lo = Infinity,
+    hi = -Infinity;
+  for (const v of values) {
+    if (v < lo) lo = v;
+    if (v > hi) hi = v;
+  }
+  return [lo, hi];
+}
+
 // Bin width follows the loaded span: a 24-hour dataset binned by day is two
 // bars and tells nobody anything.
 function timeBins(events: Event[]) {
   if (!events.length)
     return { bins: [] as { start: number; count: number }[], size: DAY };
   const times = events.map((e) => e.properties.time);
-  const min = Math.min(...times),
-    max = Math.max(...times);
+  const [min, max] = extent(times);
   const span = max - min;
   const size =
     span <= 3 * DAY
@@ -85,12 +96,15 @@ function magnitudeBins(events: Event[]) {
     .map((e) => e.properties.mag)
     .filter((m): m is number => m !== null);
   if (!values.length) return [];
-  const lo = Math.max(-2, Math.floor(Math.min(...values)) - 1),
-    hi = Math.min(10, Math.floor(Math.max(...values)) + 1);
-  return Array.from({ length: hi - lo + 1 }, (_, i) => ({
-    label: lo + i,
-    count: values.filter((m) => m >= lo + i && m < lo + i + 1).length,
-  }));
+  const [min, max] = extent(values);
+  const lo = Math.max(-2, Math.floor(min) - 1),
+    hi = Math.min(10, Math.floor(max) + 1);
+  const counts = new Array<number>(hi - lo + 1).fill(0);
+  for (const m of values) {
+    const i = Math.floor(m) - lo;
+    if (i >= 0 && i < counts.length) counts[i]++;
+  }
+  return counts.map((count, i) => ({ label: lo + i, count }));
 }
 
 // Fixed pixel padding: charts draw at their measured size, so a label is
@@ -141,20 +155,26 @@ function AnalysisView({
 }) {
   const [a, setA] = useState(4),
     [b, setB] = useState(5);
-  const { bins, size } = timeBins(events);
+  // The chart data is a function of the event list alone, and this view
+  // re-renders on every replay frame with the same list, so derive it once
+  // per list rather than once per frame.
+  const { bins, size } = useMemo(() => timeBins(events), [events]);
   const peak = Math.max(1, ...bins.map((b) => b.count));
-  // Label at most a dozen bars; hourly bins on a week of data would collide.
-  const stride = Math.ceil(bins.length / 12);
-  const mags = magnitudeBins(events);
+  const mags = useMemo(() => magnitudeBins(events), [events]);
   const mpeak = Math.max(1, ...mags.map((m) => m.count));
-  const points = events.filter(
-    (e) => e.geometry.coordinates[2] !== null && e.properties.mag !== null,
-  );
-  const depths = points.map((e) => e.geometry.coordinates[2]!),
-    magValues = points.map((e) => e.properties.mag!);
-  const maxDepth = points.length ? Math.max(10, Math.max(...depths)) : 100;
-  const magLo = points.length ? Math.floor(Math.min(...magValues) * 2) / 2 : 0,
-    magHi = points.length ? Math.ceil(Math.max(...magValues) * 2) / 2 : 6;
+  const { points, maxDepth, magLo, magHi } = useMemo(() => {
+    const points = events.filter(
+      (e) => e.geometry.coordinates[2] !== null && e.properties.mag !== null,
+    );
+    const [, deepest] = extent(points.map((e) => e.geometry.coordinates[2]!));
+    const [magMin, magMax] = extent(points.map((e) => e.properties.mag!));
+    return {
+      points,
+      maxDepth: points.length ? Math.max(10, deepest) : 100,
+      magLo: points.length ? Math.floor(magMin * 2) / 2 : 0,
+      magHi: points.length ? Math.ceil(magMax * 2) / 2 : 6,
+    };
+  }, [events]);
   const magSpan = Math.max(0.5, magHi - magLo);
   const [timelineRef, timelineWidth] = useMeasure<HTMLDivElement>();
   const [magRef, magWidth] = useMeasure<HTMLDivElement>();
@@ -168,21 +188,28 @@ function AnalysisView({
     PLOT.top + (d / maxDepth) * (PLOT.bottom - PLOT.top);
   const ratio = comparison(a, b);
   const { start, end, width } = sectionConfig;
-  const cross = events
-    .filter((event) => event.geometry.coordinates[2] !== null)
-    .map((e) => ({
-      e,
-      ...transect(
-        e.geometry.coordinates.slice(0, 2) as [number, number],
-        start,
-        end,
-        width,
-      ),
-    }))
-    .filter((e) => e.inside);
-  const sectionDepths = cross.map((point) => point.e.geometry.coordinates[2]!);
-  const sectionMin = Math.min(0, ...sectionDepths);
-  const sectionMax = Math.max(100, ...sectionDepths);
+  const { cross, sectionMin, sectionMax } = useMemo(() => {
+    const cross = events
+      .filter((event) => event.geometry.coordinates[2] !== null)
+      .map((e) => ({
+        e,
+        ...transect(
+          e.geometry.coordinates.slice(0, 2) as [number, number],
+          start,
+          end,
+          width,
+        ),
+      }))
+      .filter((e) => e.inside);
+    const [shallowest, deepest] = extent(
+      cross.map((point) => point.e.geometry.coordinates[2]!),
+    );
+    return {
+      cross,
+      sectionMin: Math.min(0, shallowest),
+      sectionMax: Math.max(100, deepest),
+    };
+  }, [events, start, end, width]);
   const sectionY = (depth: number) =>
     30 + ((depth - sectionMin) / (sectionMax - sectionMin)) * 220;
   const sectionWidth = Math.max(260, tw - 40);

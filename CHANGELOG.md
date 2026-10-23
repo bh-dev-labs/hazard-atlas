@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Dependencies: Preact 11.0.2 (from 10.29), Vite 8.3.5, Playwright 1.64.1, axe-core 4.14, TypeScript tooling and `@types/node` to current; Go `modernc.org/sqlite` 1.61.0 and its transitive modules.
+- Security hardening: every `/api/` request must now be same-origin (same-site pages on other local ports are refused, not just cross-site); EONET source links are rendered only when https; `/api/hazards?days=` is limited to 1–365; EONET `start`/`end` must be valid dates spanning at most one year; directory listings under `/assets/` and `/data/` return 404; `/api/ready` uses `PRAGMA quick_check` instead of a full integrity check; the release script no longer places Go build caches in world-writable `/tmp`.
+- Performance: the font-parsing library loads only when country labels are turned on, cutting the initial script from 410 KB to 178 KB; the globe's base map is no longer repainted when only markers change; the time-zone picker, analysis charts and wildfire replay no longer redo expensive work on every frame; the wildfire panels are memoised so auto-rotate does not re-render the whole module; `/api/config` and the initial dataset are fetched once instead of three and two times, and hidden modules defer their first load.
+- Server: a USGS `304 Not Modified` now updates the fetched time rather than re-saving the whole feed; CWFIS hotspots have their own rate-limit lane instead of sharing FIRMS's; demo fixtures are parsed and saved once per process; static assets carry `Cache-Control` headers; snapshot hashing and `/api/detail` avoid redundant copies and re-encoding.
+- Shared `fmt`, `utc` and `safeURL` helpers live in `model.ts` instead of four copies; the clear-selection button's accessible name now matches its visible text (axe 4.14).
+
 - Retained Copyright © 2026 Bruce Hoppe in source comments and LICENSE; removed the visible notice from the footer, Sources and About panels.
 
 ## 0.4.2 (2026-09-07 UTC)
