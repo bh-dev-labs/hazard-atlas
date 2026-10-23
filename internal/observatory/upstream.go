@@ -41,29 +41,40 @@ func NewService(s *Store) *Service {
 		return nil
 	}}}
 }
+
+// Fetch returns the body for u, serving conditional and short-lived cached
+// responses from memory. Callers that can skip work when the content is
+// unchanged should use fetchConditional instead.
 func (s *Service) Fetch(ctx context.Context, u string) ([]byte, error) {
+	b, _, err := s.fetchConditional(ctx, u)
+	return b, err
+}
+
+// fetchConditional is Fetch plus a notModified flag: true when USGS answered
+// 304 Not Modified and the returned body is the previously cached one.
+func (s *Service) fetchConditional(ctx context.Context, u string) (body []byte, notModified bool, err error) {
 	parsed, err := url.Parse(u)
 	if err != nil || parsed.Scheme != "https" || parsed.Host != "earthquake.usgs.gov" {
-		return nil, fmt.Errorf("invalid upstream")
+		return nil, false, fmt.Errorf("invalid upstream")
 	}
 	select {
 	case s.network <- struct{}{}:
 		defer func() { <-s.network }()
 	case <-ctx.Done():
-		return nil, ctx.Err()
+		return nil, false, ctx.Err()
 	}
 	s.cacheMu.Lock()
 	cached, hasCached := s.responses[u]
 	s.cacheMu.Unlock()
 	if hasCached && strings.Contains(u, "/detail/") && time.Since(cached.fetched) < 5*time.Minute {
-		return cached.body, nil
+		return cached.body, false, nil
 	}
 	var last error
 	for attempt := 0; attempt < 3; attempt++ {
 		s.updateProgress(ctx, func(progress *Progress) { progress.Requests++ })
 		req, err := http.NewRequestWithContext(ctx, "GET", u, nil)
 		if err != nil {
-			return nil, err
+			return nil, false, err
 		}
 		if hasCached {
 			if cached.etag != "" {
@@ -85,17 +96,17 @@ func (s *Service) Fetch(ctx context.Context, u string) ([]byte, error) {
 				s.cacheMu.Lock()
 				s.responses[u] = cached
 				s.cacheMu.Unlock()
-				return cached.body, nil
+				return cached.body, true, nil
 			}
 			if res.StatusCode == 204 {
-				return []byte(`{"type":"FeatureCollection","features":[]}`), nil
+				return []byte(`{"type":"FeatureCollection","features":[]}`), false, nil
 			}
 			if res.StatusCode == 200 {
 				if readErr != nil {
-					return nil, readErr
+					return nil, false, readErr
 				}
 				if len(b) > 32<<20 {
-					return nil, fmt.Errorf("response exceeds 32 MiB")
+					return nil, false, fmt.Errorf("response exceeds 32 MiB")
 				}
 				if json.Valid(b) {
 					s.cacheMu.Lock()
@@ -113,22 +124,22 @@ func (s *Service) Fetch(ctx context.Context, u string) ([]byte, error) {
 					s.responses[u] = responseCache{b, res.Header.Get("ETag"), res.Header.Get("Last-Modified"), time.Now()}
 					s.cacheMu.Unlock()
 				}
-				return b, nil
+				return b, false, nil
 			}
 			last = fmt.Errorf("USGS returned HTTP %d", res.StatusCode)
 			if res.StatusCode != 429 && res.StatusCode < 500 {
-				return nil, last
+				return nil, false, last
 			}
 		} else {
 			last = err
 		}
 		select {
 		case <-ctx.Done():
-			return nil, ctx.Err()
+			return nil, false, ctx.Err()
 		case <-time.After(time.Duration(500*(1<<attempt)+rand.IntN(250)) * time.Millisecond):
 		}
 	}
-	return nil, last
+	return nil, false, last
 }
 func (s *Service) Recent(ctx context.Context, period string) (Dataset, error) {
 	if period != "hour" && period != "day" && period != "week" && period != "month" {
@@ -142,8 +153,18 @@ func (s *Service) Recent(ctx context.Context, period string) (Dataset, error) {
 	if oldErr == nil && time.Since(t) < 60*time.Second {
 		return old, nil
 	}
-	raw, err := s.Fetch(ctx, query)
+	raw, notModified, err := s.fetchConditional(ctx, query)
 	if err == nil {
+		// A 304 means the feed is byte-identical to the cached body. When the
+		// stored dataset is that same content, restarting its freshness window
+		// is a single UPDATE instead of re-parsing and re-inserting every event.
+		if notModified && oldErr == nil && old.ID == datasetID(query, raw) {
+			now := time.Now().UTC()
+			if err = s.Store.Touch(old.ID, now); err == nil {
+				old.Fetched = now.Format(time.RFC3339Nano)
+				return old, nil
+			}
+		}
 		var d Dataset
 		d, err = s.Store.Save(query, raw)
 		if err == nil {

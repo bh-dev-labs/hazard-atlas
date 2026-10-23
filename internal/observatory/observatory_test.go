@@ -387,3 +387,41 @@ func TestTrackedHistoryCancellation(t *testing.T) {
 		t.Fatal("cancelled data published")
 	}
 }
+
+func TestRecentNotModifiedTouchesInsteadOfSaving(t *testing.T) {
+	s, _ := Open(filepath.Join(t.TempDir(), "db"))
+	defer s.DB.Close()
+	svc := NewService(s)
+	calls := 0
+	svc.Client.Transport = transport(func(r *http.Request) (*http.Response, error) {
+		calls++
+		if calls > 1 {
+			return &http.Response{StatusCode: 304, Body: io.NopCloser(strings.NewReader("")), Header: make(http.Header)}, nil
+		}
+		return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(string(fixture("1", "2", 3)))), Header: http.Header{"Etag": []string{"revision"}}}, nil
+	})
+	first, e := svc.Recent(context.Background(), "day")
+	if e != nil || calls != 1 {
+		t.Fatal(e, calls)
+	}
+	// Age the stored dataset past the 60 s freshness window and remove its
+	// membership rows: a full Save would recreate them, a Touch must not.
+	s.DB.Exec("UPDATE datasets SET fetched='2000-01-01T00:00:00Z'")
+	s.DB.Exec("DELETE FROM members WHERE dataset=?", first.ID)
+	second, e := svc.Recent(context.Background(), "day")
+	if e != nil || calls != 2 || second.ID != first.ID || second.Stale || strings.HasPrefix(second.Fetched, "2000") {
+		t.Fatalf("304 refresh: calls=%d id=%s fetched=%s stale=%v err=%v", calls, second.ID, second.Fetched, second.Stale, e)
+	}
+	var members int
+	s.DB.QueryRow("SELECT count(*) FROM members WHERE dataset=?", first.ID).Scan(&members)
+	if members != 0 {
+		t.Fatalf("304 refresh ran a full Save (%d member rows re-inserted)", members)
+	}
+	stored, e := s.Latest("https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/all_day.geojson")
+	if e != nil || stored.ID != first.ID || stored.Fetched != second.Fetched || string(stored.Data) != string(first.Data) {
+		t.Fatal("touched dataset not persisted", e)
+	}
+	if e := s.Touch("missing", time.Now()); e == nil {
+		t.Fatal("Touch of unknown id must report no rows")
+	}
+}

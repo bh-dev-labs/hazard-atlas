@@ -11,6 +11,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
 	"math"
 	"net/url"
 	"sort"
@@ -69,6 +70,15 @@ type GDACSEvent struct {
 }
 
 func hash(raw []byte) string { s := sha256.Sum256(raw); return hex.EncodeToString(s[:]) }
+
+// hashPrefixed hashes prefix followed by raw without concatenating them, so
+// a multi-megabyte provider body is not copied just to prepend its key.
+func hashPrefixed(prefix string, raw []byte) string {
+	h := sha256.New()
+	io.WriteString(h, prefix)
+	h.Write(raw)
+	return hex.EncodeToString(h.Sum(nil))
+}
 func validPoint(p []float64) bool {
 	return len(p) == 2 && !math.IsNaN(p[0]) && !math.IsNaN(p[1]) && math.Abs(p[0]) <= 180 && math.Abs(p[1]) <= 90
 }
@@ -182,7 +192,9 @@ func ParseEONET(raw []byte) ([]Record, error) {
 		urls := make([]string, 0, len(e.Sources))
 		gdacsID := ""
 		for _, src := range e.Sources {
-			urls = append(urls, src.URL)
+			if strings.HasPrefix(src.URL, "https://") {
+				urls = append(urls, src.URL)
+			}
 			if src.ID == "GDACS" {
 				if id, ok := gdacsEventIDFromURL(src.URL); ok {
 					gdacsID = id

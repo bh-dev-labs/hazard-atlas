@@ -2,6 +2,7 @@ import { memo } from "preact/compat";
 import {
   color,
   defaults,
+  fmt,
   regions,
   timeZoneGroups,
   zoneLabel,
@@ -35,11 +36,21 @@ type Props = {
   importSnapshot: (file: File) => void;
 };
 
-const fmt = (v: number | null | undefined, digits = 1) =>
-  v == null ? "Unavailable" : v.toFixed(digits);
-// Built once: the zone list and its offsets do not change while the page is open.
+// Built once: the zone list and its offsets do not change while the page is
+// open, and zoneOffset() is an Intl.DateTimeFormat per zone (~400 of them),
+// far too slow to repeat on every replay frame.
 const localZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-const zoneGroups = timeZoneGroups();
+const localZoneText = `Local · ${localZone.replace(/_/g, " ")} (${zoneOffset(localZone)})`;
+const zoneGroups = timeZoneGroups().map(
+  ([region, zones]) =>
+    [
+      region,
+      zones.map((z) => ({
+        value: z.value,
+        text: `${z.label} (${zoneOffset(z.value)})`,
+      })),
+    ] as const,
+);
 
 function EventTableView({
   filtered,
@@ -74,14 +85,12 @@ function EventTableView({
           Display time zone{" "}
           <select value={zone} onChange={(e) => setZone(e.currentTarget.value)}>
             <option value="UTC">UTC — catalog standard</option>
-            <option value={localZone}>
-              Local · {localZone.replace(/_/g, " ")} ({zoneOffset(localZone)})
-            </option>
+            <option value={localZone}>{localZoneText}</option>
             {zoneGroups.map(([region, zones]) => (
               <optgroup key={region} label={region}>
                 {zones.map((z) => (
                   <option key={z.value} value={z.value}>
-                    {z.label} ({zoneOffset(z.value)})
+                    {z.text}
                   </option>
                 ))}
               </optgroup>

@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useState } from "preact/hooks";
+import { useEffect, useMemo, useRef, useState } from "preact/hooks";
 import { Globe, type Camera } from "./Globe";
 import { Workspace } from "./Workspace";
-import { defaultSection } from "./data";
+import { defaultSection, extent, loadConfig } from "./data";
 import { type Event } from "./model";
 import {
   HAZARD_CATEGORIES,
@@ -14,7 +14,9 @@ import {
   type HazardSnapshot,
 } from "./hazards";
 import { HAZARD_LEGEND } from "./hazardIcons";
+import { safeSource } from "./wildfire";
 const emptyEvents: Event[] = [];
+const emptyRecords: HazardRecord[] = [];
 const SEVERITIES: AlertLevel[] = ["red", "orange", "green", "unknown"];
 const CATEGORY_TITLE: Record<HazardCategory, string> = {
   volcanoes: "Volcanoes",
@@ -70,30 +72,36 @@ export function HazardExplorer(p: { active: boolean }) {
     setAuto(false);
     setPlaying(false);
   };
+  const started = useRef(false),
+    mounted = useRef(true);
+  useEffect(
+    () => () => {
+      mounted.current = false;
+    },
+    [],
+  );
+  // The hazards request waits for the tab's first activation; the shared
+  // config promise means it never repeats the request other modules made.
   useEffect(() => {
-    let active = true;
-    fetch("/api/config")
-      .then((r) => r.json())
+    if (!p.active || started.current) return;
+    started.current = true;
+    loadConfig()
       .then((cfg) =>
         fetch(cfg.demo ? "/api/hazards?demo=true" : "/api/hazards?days=30"),
       )
       .then((r) => r.json())
       .then((d) => {
-        if (active) setSnapshot(d);
+        if (mounted.current) setSnapshot(d);
       })
-      .catch((e) => active && setMessage(String(e)));
-    return () => {
-      active = false;
-    };
-  }, []);
-  const records = snapshot?.records || [];
+      .catch((e) => mounted.current && setMessage(String(e)));
+  }, [p.active]);
+  const records = snapshot?.records || emptyRecords;
   const bounds = useMemo(() => {
-    const starts = records.map((r) => Date.parse(r.startDate));
-    const ends = records.map((r) =>
-      Date.parse((r.closed ? r.endDate : r.endDate) + "T23:59:59.999Z"),
+    if (!records.length) return { lo: 0, hi: 0 };
+    const [lo] = extent(records.map((r) => Date.parse(r.startDate)));
+    const [, hi] = extent(
+      records.map((r) => Date.parse(r.endDate + "T23:59:59.999Z")),
     );
-    const lo = starts.length ? Math.min(...starts) : 0,
-      hi = ends.length ? Math.max(...ends) : 0;
     return { lo, hi };
   }, [records]);
   useEffect(() => {
@@ -309,9 +317,9 @@ export function HazardExplorer(p: { active: boolean }) {
           : ""}
         {selected.closed ? "" : " (ongoing)"}
       </p>
-      {selected.sourceUrls.length > 0 && (
+      {selected.sourceUrls.some(safeSource) && (
         <p>
-          {selected.sourceUrls.map((u, i) => (
+          {selected.sourceUrls.filter(safeSource).map((u, i) => (
             <span key={u}>
               {i > 0 && " · "}
               <a href={u} target="_blank" rel="noreferrer">

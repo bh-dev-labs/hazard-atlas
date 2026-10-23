@@ -98,7 +98,7 @@ func main() {
 		reply(w, map[string]string{"status": "ok", "version": version}, nil)
 	})
 	mux.HandleFunc("GET /api/ready", func(w http.ResponseWriter, r *http.Request) {
-		reply(w, map[string]bool{"ready": store.Check() == nil}, nil)
+		reply(w, map[string]bool{"ready": store.QuickCheck() == nil}, nil)
 	})
 	mux.HandleFunc("GET /api/config", func(w http.ResponseWriter, r *http.Request) { reply(w, map[string]bool{"demo": *demo}, nil) })
 	mux.HandleFunc("GET /api/recent", func(w http.ResponseWriter, r *http.Request) {
@@ -172,12 +172,19 @@ func main() {
 			reply(w, nil, e)
 			return
 		}
-		var v map[string]any
-		if e = json.Unmarshal(raw, &v); e != nil || v["type"] != "Feature" || v["id"] != id {
+		// Validate shape and identity without decoding the whole document into
+		// maps and re-encoding it; the body is passed through as received.
+		var v struct {
+			Type string `json:"type"`
+			ID   string `json:"id"`
+		}
+		if e = json.Unmarshal(raw, &v); e != nil || !json.Valid(raw) || v.Type != "Feature" || v.ID != id {
 			reply(w, nil, fmt.Errorf("invalid USGS detail response"))
 			return
 		}
-		reply(w, v, nil)
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Cache-Control", "no-store")
+		w.Write(raw)
 	})
 	mux.HandleFunc("GET /api/metrics", func(w http.ResponseWriter, r *http.Request) {
 		reply(w, map[string]uint64{"requests": requests.Load()}, nil)
@@ -190,7 +197,7 @@ func main() {
 		reply(w, map[string]string{"status": "stopping"}, nil)
 		go func() { time.Sleep(100 * time.Millisecond); stop() }()
 	})
-	mux.Handle("GET /", http.FileServerFS(static))
+	mux.Handle("GET /", cacheControl(http.FileServerFS(static)))
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		id := requests.Add(1)
 		w.Header().Set("X-Request-ID", fmt.Sprint(id))
@@ -207,6 +214,16 @@ func main() {
 		}
 		if r.Header.Get("Sec-Fetch-Site") == "cross-site" {
 			http.Error(w, "cross-site request denied", 403)
+			return
+		}
+		// API calls, including state-changing GETs, must come from this origin.
+		// Other local servers (same-site, different port) are refused.
+		if strings.HasPrefix(r.URL.Path, "/api/") && !sameOrigin(r) {
+			http.Error(w, "same-origin request required", 403)
+			return
+		}
+		if strings.HasSuffix(r.URL.Path, "/") && r.URL.Path != "/" {
+			http.NotFound(w, r)
 			return
 		}
 		mux.ServeHTTP(w, r)
@@ -249,6 +266,25 @@ func main() {
 	}
 }
 
+// cacheControl sets caching headers for the embedded site. Embedded files
+// carry a zero modification time, so without this nothing would be cached:
+// Vite's /assets/* names are content-hashed and immutable, /data/* fixtures
+// change only with a release, and the HTML shell must always be revalidated
+// so a new build's asset names are picked up.
+func cacheControl(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.HasPrefix(r.URL.Path, "/assets/"):
+			w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+		case strings.HasPrefix(r.URL.Path, "/data/"):
+			w.Header().Set("Cache-Control", "public, max-age=86400")
+		case r.URL.Path == "/" || r.URL.Path == "/index.html":
+			w.Header().Set("Cache-Control", "no-cache")
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
 // sameOrigin protects endpoints that change local state. Origin is the
 // authoritative browser signal; Sec-Fetch-Site provides a second check in
 // modern browsers, while requests without either header remain usable for
@@ -257,7 +293,7 @@ func sameOrigin(r *http.Request) bool {
 	if origin := r.Header.Get("Origin"); origin != "" && origin != "http://"+r.Host {
 		return false
 	}
-	if site := r.Header.Get("Sec-Fetch-Site"); site != "" && site != "same-origin" {
+	if site := r.Header.Get("Sec-Fetch-Site"); site != "" && site != "same-origin" && site != "none" {
 		return false
 	}
 	return true

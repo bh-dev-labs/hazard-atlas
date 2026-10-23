@@ -281,3 +281,20 @@ export function zoneLabel(zone: string) {
   const offset = zoneOffset(zone);
   return offset ? `${city} (${offset})` : city;
 }
+
+// Shared display helpers.
+export const fmt = (v: number | null | undefined, digits = 1) =>
+  v == null ? "Unavailable" : v.toFixed(digits);
+export const utc = (t: number) =>
+  new Date(t).toISOString().replace("T", " ").replace(".000Z", " UTC");
+export const safeURL = (s: string) => {
+  try {
+    const u = new URL(s);
+    return u.protocol === "https:" &&
+      (u.hostname === "earthquake.usgs.gov" || u.hostname === "www.usgs.gov")
+      ? u.href
+      : "";
+  } catch {
+    return "";
+  }
+};
